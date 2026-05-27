@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from app.connectors.bitsight import BitSightConnector
 
 app = FastAPI(
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 templates = Jinja2Templates(directory="app/templates")
+app.mount("/assets", StaticFiles(directory="app/templates/assets"), name="assets")
 
 @app.get("/")
 def root():
