@@ -1,181 +1,72 @@
 <html>
   <head>
     <title>BitSight Summary</title>
-    <style>
-      :root {
-        --bg: #0b1220;
-        --panel: #111a2e;
-        --panel-soft: #16223c;
-        --text: #e5edf8;
-        --muted: #9bb0d1;
-        --accent: #4ea1ff;
-        --success: #38c793;
-        --warn: #f5b942;
-        --danger: #f36d6d;
-      }
-
-      * { box-sizing: border-box; }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: "Inter", "Segoe UI", Arial, sans-serif;
-        background:
-          radial-gradient(1200px circle at 10% -10%, #1e3a74 0%, transparent 35%),
-          radial-gradient(900px circle at 90% 110%, #273c6e 0%, transparent 32%),
-          var(--bg);
-        color: var(--text);
-        display: flex;
-        justify-content: center;
-        padding: 44px 20px;
-      }
-
-      .card {
-        position: relative;
-        width: min(960px, 100%);
-        border-radius: 18px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-      }
-
-      .card::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: url('/assets/bitsight_logo.jpg') no-repeat right -90px top -60px / 340px auto;
-        opacity: 0.08;
-        pointer-events: none;
-      }
-
-      .content { position: relative; z-index: 2; padding: 28px; }
-
-      .header {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-
-      .logo {
-        width: 56px;
-        height: 56px;
-        border-radius: 12px;
-        object-fit: contain;
-        background: #fff;
-        padding: 8px;
-      }
-
-      h1 { margin: 0 0 4px; font-size: 1.75rem; }
-      .subtitle { margin: 0; color: var(--muted); }
-
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 12px;
-        margin: 16px 0 24px;
-      }
-
-      .tile {
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(16, 27, 49, 0.68);
-        border-radius: 14px;
-        padding: 14px;
-      }
-
-      .label { color: var(--muted); font-size: 0.86rem; margin-bottom: 8px; }
-      .value { font-size: 1.25rem; font-weight: 700; }
-      .score { font-size: 2.1rem; font-weight: 800; letter-spacing: 0.5px; }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-weight: 600;
-        font-size: 0.9rem;
-      }
-
-      .risk-low { color: #052313; background: var(--success); }
-      .risk-moderate { color: #2d1b00; background: var(--warn); }
-      .risk-high { color: #2f0606; background: var(--danger); }
-
-      .status { margin: 12px 0 0; color: var(--muted); }
-
-      .sparkline-wrap {
-        margin-top: 10px;
-        background: rgba(14, 21, 40, 0.78);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 14px;
-        padding: 12px;
-      }
-
-      .sparkline {
-        width: 100%;
-        max-height: 165px;
-        object-fit: contain;
-      }
-
-      .link-btn {
-        display: inline-block;
-        margin-top: 20px;
-        text-decoration: none;
-        color: #031326;
-        background: linear-gradient(135deg, #7ec0ff, var(--accent));
-        border-radius: 10px;
-        font-weight: 700;
-        padding: 10px 14px;
-      }
-    </style>
   </head>
 
-  <body>
-    <section class="card">
-      <div class="content">
-        <div class="header">
-          <img class="logo" src="/assets/bitsight_logo.jpg" alt="BitSight logo" />
-          <div>
-            <h1>{{ company_name }}</h1>
-            <p class="subtitle">BitSight Security Rating Dashboard</p>
-          </div>
+  <body style="
+        font-family: Arial;
+        padding: 40px;
+        background-color: #f4f6f8;
+    ">
+    <div style="
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 800px;
+            box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+        ">
+      <div style="
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 25px;
+            ">
+        <img src="/bitsight/logo" style="
+                        width: 45px;
+                        height: 45px;
+                        object-fit: contain;
+                        border-radius: 8px;
+                    " />
+
+        <div>
+          <h1 style="margin: 0;">{{ company_name }}</h1>
+
+          <p style="
+                        margin: 0;
+                        color: gray;
+                    ">BitSight Security Rating Dashboard</p>
         </div>
-
-        <div class="stats">
-          <div class="tile">
-            <div class="label">BitSight Score</div>
-            <div class="score">{{ score }}</div>
-          </div>
-
-          <div class="tile">
-            <div class="label">Risk Level</div>
-            <div class="value">
-              <span class="badge risk-{{ risk_level|lower }}">{{ risk_level }}</span>
-            </div>
-            <p class="status">{{ status }}</p>
-          </div>
-
-          <div class="tile">
-            <div class="label">Rating Date</div>
-            <div class="value">{{ rating_date }}</div>
-          </div>
-
-          <div class="tile">
-            <div class="label">Tracked Since</div>
-            <div class="value">{{ rating_since }}</div>
-          </div>
-        </div>
-
-        <div class="sparkline-wrap">
-          <div class="label">Security Rating Trend</div>
-          <img class="sparkline" src="/bitsight/sparkline" alt="Security rating trend" />
-        </div>
-
-        <a class="link-btn" href="{{ company_url }}" target="_blank" rel="noopener noreferrer">
-          Open in BitSight
-        </a>
       </div>
-    </section>
+
+      <hr />
+
+      <h2>BitSight Score: {{ score }}</h2>
+
+      <h3>Risk Level: {{ risk_level }}</h3>
+
+      <p>{{ status }}</p>
+
+      <hr />
+
+      <h3>Security Rating Trend</h3>
+
+      <img src="/bitsight/sparkline"/>
+
+      <hr />
+
+      <p>
+        <strong>Rating Date:</strong>
+        {{ rating_date }}
+      </p>
+
+      <p>
+        <strong>Tracked Since:</strong>
+        {{ rating_since }}
+      </p>
+
+      <hr />
+
+      <a href="{{ company_url }}" target="_blank">Open in BitSight</a>
+    </div>
   </body>
 </html>
