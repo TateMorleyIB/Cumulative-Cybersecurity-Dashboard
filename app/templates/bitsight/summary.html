@@ -1,0 +1,72 @@
+<html>
+  <head>
+    <title>BitSight Summary</title>
+  </head>
+
+  <body style="
+        font-family: Arial;
+        padding: 40px;
+        background-color: #f4f6f8;
+    ">
+    <div style="
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 800px;
+            box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+        ">
+      <div style="
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 25px;
+            ">
+        <img src="/bitsight/logo" style="
+                        width: 45px;
+                        height: 45px;
+                        object-fit: contain;
+                        border-radius: 8px;
+                    " />
+
+        <div>
+          <h1 style="margin: 0;">{{ company_name }}</h1>
+
+          <p style="
+                        margin: 0;
+                        color: gray;
+                    ">BitSight Security Rating Dashboard</p>
+        </div>
+      </div>
+
+      <hr />
+
+      <h2>BitSight Score: {{ score }}</h2>
+
+      <h3>Risk Level: {{ risk_level }}</h3>
+
+      <p>{{ status }}</p>
+
+      <hr />
+
+      <h3>Security Rating Trend</h3>
+
+      <img src="/bitsight/sparkline"/>
+
+      <hr />
+
+      <p>
+        <strong>Rating Date:</strong>
+        {{ rating_date }}
+      </p>
+
+      <p>
+        <strong>Tracked Since:</strong>
+        {{ rating_since }}
+      </p>
+
+      <hr />
+
+      <a href="{{ company_url }}" target="_blank">Open in BitSight</a>
+    </div>
+  </body>
+</html>
