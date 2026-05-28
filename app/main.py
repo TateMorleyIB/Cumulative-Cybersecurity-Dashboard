@@ -3,23 +3,119 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.connectors.bitsight import BitSightConnector
+from app.connectors.crowdstrike import CrowdStrikeConnector
 
-app = FastAPI(
-    title="Cumulative Cybersecurity Dashboard",
-    version="1.0.0"
-)
+app = FastAPI(title="Cumulative Cybersecurity Dashboard", version="1.0.0")
 
 templates = Jinja2Templates(directory="app/templates")
 app.mount("/assets", StaticFiles(directory="app/templates/assets"), name="assets")
 
+
+def build_bitsight_overview():
+    try:
+        connector = BitSightConnector()
+        summary = connector.get_company_summary()
+        if not summary:
+            raise ValueError("No BitSight company summary returned")
+
+        score = summary.get("score")
+        if score is None:
+            risk_level = "Unknown"
+            status = "BitSight score unavailable"
+        elif score >= 740:
+            risk_level = "Low"
+            status = "Strong security posture"
+        elif score >= 640:
+            risk_level = "Moderate"
+            status = "Acceptable security posture, some risk"
+        else:
+            risk_level = "High"
+            status = "Needs attention"
+
+        return {
+            "company_name": summary.get("name") or "BitSight",
+            "score": score or "N/A",
+            "risk_level": risk_level,
+            "status": status,
+            "rating_date": summary.get("rating_date") or "Unknown",
+        }
+    except Exception as error:
+        return {
+            "company_name": "BitSight",
+            "score": "N/A",
+            "risk_level": "Unknown",
+            "status": "Unavailable",
+            "rating_date": "Unknown",
+            "error": str(error),
+        }
+
+
+def build_crowdstrike_overview(use_cache: bool = True):
+    try:
+        connector = CrowdStrikeConnector()
+        snapshot = connector.get_snapshot(use_cache=use_cache)
+        normalized = snapshot.get("normalized", {})
+        summary = normalized.get("summary", {})
+        critical_or_high = summary.get("critical_or_high_events", 0)
+        total_events = summary.get("total_security_events", 0)
+        errors = snapshot.get("errors", {})
+
+        if critical_or_high:
+            risk_level = "High"
+            status = f"{critical_or_high} critical/high events need review"
+        elif total_events:
+            risk_level = "Moderate"
+            status = "Events present, no critical/high events observed"
+        else:
+            risk_level = "Low"
+            status = "No active security events in the current snapshot"
+
+        if errors:
+            status = f"{status}; {len(errors)} collection warning(s)"
+
+        return {
+            "total_hosts": summary.get("total_hosts", 0),
+            "total_security_events": total_events,
+            "critical_or_high_events": critical_or_high,
+            "total_vulnerabilities": summary.get("total_vulnerabilities", 0),
+            "risk_level": risk_level,
+            "status": status,
+            "errors": errors,
+        }
+    except Exception as error:
+        return {
+            "total_hosts": 0,
+            "total_security_events": 0,
+            "critical_or_high_events": 0,
+            "total_vulnerabilities": 0,
+            "risk_level": "Unknown",
+            "status": "Unavailable",
+            "error": str(error),
+        }
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def get_master_dashboard(request: Request, use_cache: bool = True):
+    return templates.TemplateResponse(
+        request=request,
+        name="master_dashboard.html",
+        context={
+            "bitsight": build_bitsight_overview(),
+            "crowdstrike": build_crowdstrike_overview(use_cache=use_cache),
+        },
+    )
+
+
 @app.get("/")
 def root():
     return {
-        "status":"running",
-        "message": "Cybersecurity Dashboard API Online"
+        "status": "running",
+        "message": "Cybersecurity Dashboard API Online",
+        "dashboard": "/dashboard",
     }
 
-### 
+
+###
 # ==============================
 # BITSIGHT
 # ==============================
@@ -57,6 +153,7 @@ def get_bitsight_sparkline():
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))
 
+
 @app.get("/bitsight/summary", response_class=HTMLResponse)
 def get_bitsight_summary(request: Request):
 
@@ -65,10 +162,7 @@ def get_bitsight_summary(request: Request):
         summary = connector.get_company_summary()
 
         if not summary:
-            raise HTTPException(
-                status_code=404,
-                detail="Error fetching summary"
-            )
+            raise HTTPException(status_code=404, detail="Error fetching summary")
 
         score = summary.get("score")
 
@@ -94,15 +188,69 @@ def get_bitsight_summary(request: Request):
                 "status": status,
                 "rating_date": summary.get("rating_date"),
                 "rating_since": summary.get("rating_since"),
-                "company_url": summary.get("company_url")
-            }
+                "company_url": summary.get("company_url"),
+            },
         )
 
     except HTTPException:
         raise
 
     except Exception as error:
-        raise HTTPException(
-            status_code=500,
-            detail=str(error)
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+###
+# ==============================
+# CROWDSTRIKE
+# ==============================
+###
+@app.get("/crowdstrike/summary")
+def get_crowdstrike_summary(use_cache: bool = True):
+    try:
+        connector = CrowdStrikeConnector()
+        snapshot = connector.get_snapshot(use_cache=use_cache)
+        return {
+            "generated_at": snapshot.get("generated_at"),
+            "base_url": snapshot.get("base_url"),
+            "limits": snapshot.get("limits"),
+            "errors": snapshot.get("errors"),
+            "normalized": snapshot.get("normalized"),
+        }
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.get("/crowdstrike/raw")
+def get_crowdstrike_raw(use_cache: bool = True):
+    try:
+        connector = CrowdStrikeConnector()
+        return connector.get_snapshot(use_cache=use_cache)
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.get("/crowdstrike/dashboard", response_class=HTMLResponse)
+def get_crowdstrike_dashboard(request: Request, use_cache: bool = True):
+    try:
+        connector = CrowdStrikeConnector()
+        snapshot = connector.get_snapshot(use_cache=use_cache)
+        normalized = snapshot.get("normalized", {})
+
+        return templates.TemplateResponse(
+            request=request,
+            name="crowdstrike/dashboard.html",
+            context={
+                "generated_at": snapshot.get("generated_at"),
+                "base_url": snapshot.get("base_url"),
+                "errors": snapshot.get("errors", {}),
+                "summary": normalized.get("summary", {}),
+                "groupings": normalized.get("groupings", {}),
+                "events": normalized.get("security_events", []),
+                "hosts": normalized.get("hosts", []),
+            },
         )
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
