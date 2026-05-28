@@ -15,7 +15,7 @@ from app.config import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_FILE = PROJECT_ROOT / "data" / "raw" / "crowdstrike" / "crowdstrike_snapshot.json"
-CACHE_TTL = timedelta(minutes=15)
+CACHE_TTL = timedelta(hours=4)
 DEFAULT_BASE_URL = "https://api.crowdstrike.com"
 DEFAULT_LIMITS = {
     "hosts": 500,

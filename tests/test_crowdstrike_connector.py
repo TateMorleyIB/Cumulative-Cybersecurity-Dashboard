@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 import requests
 
-from app.connectors.crowdstrike import CrowdStrikeConnector, DEFAULT_LIMITS
+from app.connectors.crowdstrike import CACHE_TTL, CrowdStrikeConnector, DEFAULT_LIMITS
 
 
 class DummyResponse:
@@ -174,3 +176,7 @@ def test_normalization_handles_nested_dict_values_without_unhashable_errors():
     assert normalized["summary"]["top_sources"] == [("detected-host", 1)]
     assert normalized["summary"]["top_users"] == [("analyst", 1)]
     assert normalized["groupings"]["hosts_by_platform"] == {"Windows": 1}
+
+
+def test_crowdstrike_cache_ttl_is_four_hours():
+    assert CACHE_TTL == timedelta(hours=4)
