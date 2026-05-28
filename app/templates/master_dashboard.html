@@ -10,8 +10,9 @@
     <main class="page-shell">
         <section class="page-header">
             <div>
+                <p class="page-kicker">Unified security command center</p>
                 <h1>Cumulative Cybersecurity Dashboard</h1>
-                <p class="subtitle">High-level security posture from BitSight and CrowdStrike Falcon.</p>
+                <p class="subtitle">High-level security posture from BitSight ratings and CrowdStrike Falcon telemetry in one clean view.</p>
             </div>
         </section>
 
@@ -19,7 +20,7 @@
             <article class="tool-card">
                 <div class="tool-header">
                     <div class="tool-title">
-                        <div class="tool-icon">BS</div>
+                        <div class="product-mark bitsight">BS</div>
                         <div>
                             <h2>BitSight</h2>
                             <p class="muted">{{ bitsight.company_name }}</p>
@@ -44,13 +45,13 @@
                     <p class="tool-copy status">{{ bitsight.status }}</p>
                 {% endif %}
 
-                <a class="tool-link" href="/bitsight/summary">Open BitSight dashboard</a>
+                <a class="tool-link" href="/bitsight/summary">Open BitSight dashboard →</a>
             </article>
 
             <article class="tool-card">
                 <div class="tool-header">
                     <div class="tool-title">
-                        <div class="tool-icon">CS</div>
+                        <div class="product-mark crowdstrike">CS</div>
                         <div>
                             <h2>CrowdStrike</h2>
                             <p class="muted">Falcon operational telemetry</p>
@@ -83,7 +84,7 @@
                     <p class="tool-copy status">{{ crowdstrike.status }}</p>
                 {% endif %}
 
-                <a class="tool-link" href="/crowdstrike/dashboard">Open CrowdStrike dashboard</a>
+                <a class="tool-link" href="/crowdstrike/dashboard">Open CrowdStrike dashboard →</a>
             </article>
         </section>
     </main>
