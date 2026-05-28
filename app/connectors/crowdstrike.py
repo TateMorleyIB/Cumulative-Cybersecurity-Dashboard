@@ -18,7 +18,7 @@ DEFAULT_LIMITS = {
     "alerts": 250,
     "identity_alerts": 250,
     "incidents": 250,
-    "vulnerabilities": 500,
+    "vulnerabilities": 400,
 }
 SEVERITY_ORDER = {
     "critical": 5,
@@ -85,14 +85,48 @@ class CrowdStrikeConnector:
         sort: str | None = None,
         filter_query: str | None = None,
     ) -> list[str]:
+        data = self._query(path, limit, sort=sort, filter_query=filter_query)
+        resources = data.get("resources", [])
+        return [resource for resource in resources if isinstance(resource, str)]
+
+    def _query(
+        self,
+        path: str,
+        limit: int,
+        sort: str | None = None,
+        filter_query: str | None = None,
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {"limit": limit}
         if sort:
             params["sort"] = sort
         if filter_query:
             params["filter"] = filter_query
-        data = self._request("GET", path, params=params)
-        resources = data.get("resources", [])
-        return [resource for resource in resources if isinstance(resource, str)]
+        return self._request("GET", path, params=params)
+
+    def _query_ids_with_fallbacks(
+        self,
+        path: str,
+        limit: int,
+        sorts: list[str | None],
+        filter_query: str | None = None,
+    ) -> list[str]:
+        last_error: requests.HTTPError | None = None
+        for sort in sorts:
+            try:
+                return self._query_ids(
+                    path, limit, sort=sort, filter_query=filter_query
+                )
+            except requests.HTTPError as error:
+                last_error = error
+                if error.response is None or error.response.status_code not in {
+                    400,
+                    404,
+                    500,
+                }:
+                    raise
+        if last_error:
+            raise last_error
+        return []
 
     def _fetch_entities_get(
         self, path: str, ids: list[str], id_param: str = "ids"
@@ -108,12 +142,14 @@ class CrowdStrikeConnector:
             )
         return entities
 
-    def _fetch_entities_post(self, path: str, ids: list[str]) -> list[dict[str, Any]]:
+    def _fetch_entities_post(
+        self, path: str, ids: list[str], id_key: str = "ids"
+    ) -> list[dict[str, Any]]:
         if not ids:
             return []
         entities: list[dict[str, Any]] = []
         for chunk in self._chunks(ids, 100):
-            data = self._request("POST", path, json={"ids": chunk})
+            data = self._request("POST", path, json={id_key: chunk})
             entities.extend(
                 [item for item in data.get("resources", []) if isinstance(item, dict)]
             )
@@ -132,42 +168,106 @@ class CrowdStrikeConnector:
     def get_detections(
         self, limit: int = DEFAULT_LIMITS["detections"]
     ) -> list[dict[str, Any]]:
-        ids = self._query_ids(
-            "/detects/queries/detects/v1", limit, sort="first_behavior.desc"
+        try:
+            ids = self._query_ids_with_fallbacks(
+                "/detects/queries/detects/v1",
+                limit,
+                sorts=["first_behavior.desc", "updated_timestamp|desc", None],
+            )
+            return self._fetch_entities_get("/detects/entities/summaries/GET/v1", ids)
+        except requests.HTTPError as error:
+            if error.response is None or error.response.status_code != 404:
+                raise
+
+        # CrowdStrike has migrated endpoint detections into Unified Alerts in many
+        # tenants. If the legacy Detects API is absent, use endpoint-scoped alerts
+        # so the dashboard still shows detection signal instead of a 404 banner.
+        return self._get_alerts_by_filter(
+            limit=limit,
+            filter_query="data_domains:'Endpoint'",
+            fallback_filter="product:'epp'",
         )
-        return self._fetch_entities_get("/detects/entities/summaries/GET/v1", ids)
 
     def get_incidents(
         self, limit: int = DEFAULT_LIMITS["incidents"]
     ) -> list[dict[str, Any]]:
-        ids = self._query_ids(
-            "/incidents/queries/incidents/v1", limit, sort="start.desc"
+        try:
+            ids = self._query_ids_with_fallbacks(
+                "/incidents/queries/incidents/v1",
+                limit,
+                sorts=["start.desc", "modified_timestamp.desc", None],
+            )
+            return self._fetch_entities_get("/incidents/entities/incidents/GET/v1", ids)
+        except requests.HTTPError as error:
+            if error.response is None or error.response.status_code not in {404, 500}:
+                raise
+
+        # The legacy Incidents API is being retired in favor of Unified Alerts for
+        # some tenants. Fall back to incident-like alerts without surfacing a hard
+        # dashboard error for retired endpoints.
+        return self._get_alerts_by_filter(
+            limit=limit,
+            filter_query="type:'IncidentSummaryEvent'",
+            fallback_filter="product:'incident'",
         )
-        return self._fetch_entities_get("/incidents/entities/incidents/GET/v1", ids)
 
     def get_alerts(self, limit: int = DEFAULT_LIMITS["alerts"]) -> list[dict[str, Any]]:
-        ids = self._query_ids(
-            "/alerts/queries/alerts/v2", limit, sort="created_timestamp|desc"
-        )
-        return self._fetch_entities_get(
-            "/alerts/entities/alerts/v2", ids, id_param="composite_ids"
-        )
+        return self._get_alerts_by_filter(limit=limit)
+
+    def _get_alerts_by_filter(
+        self,
+        limit: int,
+        filter_query: str | None = None,
+        fallback_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        filters = [filter_query]
+        if fallback_filter and fallback_filter not in filters:
+            filters.append(fallback_filter)
+        if filter_query is not None:
+            filters.append(None)
+
+        last_error: requests.HTTPError | None = None
+        for current_filter in filters:
+            try:
+                ids = self._query_ids_with_fallbacks(
+                    "/alerts/queries/alerts/v2",
+                    limit,
+                    sorts=["created_timestamp|desc", "updated_timestamp|desc", None],
+                    filter_query=current_filter,
+                )
+                return self._fetch_entities_post(
+                    "/alerts/entities/alerts/v2", ids, id_key="composite_ids"
+                )
+            except requests.HTTPError as error:
+                last_error = error
+                if error.response is None or error.response.status_code != 400:
+                    raise
+
+        if last_error:
+            raise last_error
+        return []
 
     def get_identity_alerts(
         self, limit: int = DEFAULT_LIMITS["identity_alerts"]
     ) -> list[dict[str, Any]]:
-        ids = self._query_ids(
-            "/identity-protection/queries/alerts/v1", limit, sort="timestamp.desc"
+        # Identity alert records are exposed through Unified Alerts in current
+        # Falcon tenants. The old identity-protection alerts route can return 404
+        # even when the client has Identity Protection Alerts read access.
+        return self._get_alerts_by_filter(
+            limit=limit,
+            filter_query="data_domains:'Identity'",
+            fallback_filter="product:'idp'",
         )
-        return self._fetch_entities_get("/identity-protection/entities/alerts/v1", ids)
 
     def get_vulnerabilities(
         self, limit: int = DEFAULT_LIMITS["vulnerabilities"]
     ) -> list[dict[str, Any]]:
-        ids = self._query_ids(
+        # Spotlight caps this query at 400 and uses pipe-delimited sort direction.
+        safe_limit = min(limit, 400)
+        ids = self._query_ids_with_fallbacks(
             "/spotlight/queries/vulnerabilities/v1",
-            limit,
-            sort="updated_timestamp.desc",
+            safe_limit,
+            sorts=["updated_timestamp|desc", "created_timestamp|desc", None],
         )
         return self._fetch_entities_post("/spotlight/entities/vulnerabilities/v2", ids)
 
@@ -376,28 +476,41 @@ class CrowdStrikeConnector:
 
     def _normalize_incident(self, incident: dict[str, Any]) -> dict[str, Any]:
         return {
-            "id": self._first(incident, "incident_id", "id"),
+            "id": self._first(incident, "incident_id", "id", "composite_id"),
             "type": "incident",
-            "title": self._first(incident, "name", "description") or "Incident",
+            "title": self._first(incident, "name", "display_name", "description")
+            or "Incident",
             "severity": self._severity_from_any(
                 self._first(incident, "severity", "severity_name", "state")
             ),
-            "status": self._first(incident, "status", "state"),
+            "status": self._first(incident, "status", "state", "workflow_status"),
             "timestamp": self._first(
-                incident, "start", "created", "modified_timestamp", "end"
+                incident,
+                "start",
+                "created",
+                "created_timestamp",
+                "modified_timestamp",
+                "updated_timestamp",
+                "end",
             ),
-            "source": (
-                ", ".join(incident.get("hosts", [])[:3])
-                if isinstance(incident.get("hosts"), list)
-                else None
-            ),
-            "user": None,
-            "tactic": None,
-            "technique": None,
-            "objective": self._first(incident, "objective", "type"),
-            "description": self._first(incident, "description"),
+            "source": self._incident_source(incident),
+            "user": self._first(incident, "user_name", "username", "account_name"),
+            "tactic": self._first(incident, "tactic", "mitre_tactic"),
+            "technique": self._first(incident, "technique", "mitre_technique"),
+            "objective": self._first(incident, "objective", "type", "category"),
+            "description": self._first(incident, "description", "scenario"),
             "raw": incident,
         }
+
+    @staticmethod
+    def _incident_source(incident: dict[str, Any]) -> str | None:
+        hosts = incident.get("hosts")
+        if isinstance(hosts, list):
+            return ", ".join(str(host) for host in hosts[:3])
+        for key in ("device_name", "hostname", "source_endpoint_name", "endpoint_name"):
+            if incident.get(key):
+                return incident[key]
+        return None
 
     def _normalize_vulnerability(self, vulnerability: dict[str, Any]) -> dict[str, Any]:
         cve = vulnerability.get("cve") or {}
