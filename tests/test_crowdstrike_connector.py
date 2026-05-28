@@ -178,5 +178,5 @@ def test_normalization_handles_nested_dict_values_without_unhashable_errors():
     assert normalized["groupings"]["hosts_by_platform"] == {"Windows": 1}
 
 
-def test_crowdstrike_cache_ttl_is_four_hours():
-    assert CACHE_TTL == timedelta(hours=4)
+def test_crowdstrike_cache_ttl_is_fifteen_minutes():
+    assert CACHE_TTL == timedelta(minutes=15)
