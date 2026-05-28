@@ -568,10 +568,14 @@ class CrowdStrikeConnector:
         events: list[dict[str, Any]],
         vulnerabilities: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        severity_counts = Counter(event.get("severity", "unknown") for event in events)
-        event_type_counts = Counter(event.get("type", "unknown") for event in events)
+        severity_counts = Counter(
+            self._display_value(event.get("severity"), "unknown") for event in events
+        )
+        event_type_counts = Counter(
+            self._display_value(event.get("type"), "unknown") for event in events
+        )
         status_counts = Counter(
-            str(event.get("status") or "unknown") for event in events
+            self._display_value(event.get("status"), "unknown") for event in events
         )
         stale_hosts = [host for host in hosts if self._is_stale(host.get("last_seen"))]
         return {
@@ -586,10 +590,12 @@ class CrowdStrikeConnector:
             "event_type_counts": dict(event_type_counts),
             "status_counts": dict(status_counts),
             "top_sources": Counter(
-                event.get("source") or "Unknown" for event in events
+                self._display_value(event.get("source"), "Unknown") for event in events
             ).most_common(10),
             "top_users": Counter(
-                event.get("user") or "Unknown" for event in events if event.get("user")
+                self._display_value(event.get("user"), "Unknown")
+                for event in events
+                if event.get("user")
             ).most_common(10),
         }
 
@@ -601,14 +607,18 @@ class CrowdStrikeConnector:
     ) -> dict[str, Any]:
         hosts_by_platform = defaultdict(list)
         for host in hosts:
-            hosts_by_platform[host.get("platform") or "Unknown"].append(host)
+            hosts_by_platform[
+                self._display_value(host.get("platform"), "Unknown")
+            ].append(host)
         events_by_severity = defaultdict(list)
         for event in events:
-            events_by_severity[event.get("severity") or "unknown"].append(event)
+            events_by_severity[
+                self._display_value(event.get("severity"), "unknown")
+            ].append(event)
         vulnerabilities_by_severity = defaultdict(list)
         for vulnerability in vulnerabilities:
             vulnerabilities_by_severity[
-                vulnerability.get("severity") or "unknown"
+                self._display_value(vulnerability.get("severity"), "unknown")
             ].append(vulnerability)
         return {
             "hosts_by_platform": {
@@ -626,6 +636,8 @@ class CrowdStrikeConnector:
     def _severity_from_any(value: Any) -> str:
         if value is None:
             return "unknown"
+        if isinstance(value, (dict, list)):
+            value = CrowdStrikeConnector._display_value(value, "unknown")
         if isinstance(value, (int, float)):
             if value > 10:
                 if value >= 90:
@@ -665,8 +677,38 @@ class CrowdStrikeConnector:
     def _parse_timestamp(value: str) -> datetime | None:
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except (TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _display_value(value: Any, fallback: str | None = None) -> str:
+        if value in (None, "", []):
+            return fallback or ""
+        if isinstance(value, dict):
+            for key in (
+                "hostname",
+                "device_name",
+                "computer_name",
+                "name",
+                "display_name",
+                "username",
+                "user_name",
+                "id",
+                "device_id",
+                "aid",
+            ):
+                nested_value = value.get(key)
+                if nested_value not in (None, "", []):
+                    return CrowdStrikeConnector._display_value(nested_value, fallback)
+            return json.dumps(value, sort_keys=True, default=str)[:200]
+        if isinstance(value, list):
+            labels = [
+                CrowdStrikeConnector._display_value(item)
+                for item in value[:3]
+                if item not in (None, "", [])
+            ]
+            return ", ".join(label for label in labels if label) or (fallback or "")
+        return str(value)
 
     @staticmethod
     def _first(data: dict[str, Any], *keys: str) -> Any:
@@ -678,5 +720,7 @@ class CrowdStrikeConnector:
                     break
                 current = current[part]
             if current not in (None, "", []):
+                if isinstance(current, (dict, list)):
+                    return CrowdStrikeConnector._display_value(current)
                 return current
         return None

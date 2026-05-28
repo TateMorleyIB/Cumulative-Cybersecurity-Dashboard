@@ -108,3 +108,39 @@ def test_vulnerability_query_uses_spotlight_limit_and_pipe_sort(monkeypatch):
     monkeypatch.setattr(crowdstrike, "_fetch_entities_post", fake_fetch_entities_post)
 
     assert crowdstrike.get_vulnerabilities(limit=500) == [{"id": "vulnerability-1"}]
+
+
+def test_normalization_handles_nested_dict_values_without_unhashable_errors():
+    crowdstrike = connector()
+    normalized = crowdstrike.normalize(
+        {
+            "hosts": [
+                {
+                    "device_id": "host-1",
+                    "hostname": {"name": "nested-hostname"},
+                    "platform_name": {"name": "Windows"},
+                    "last_seen": {"unexpected": "timestamp-shape"},
+                }
+            ],
+            "detections": [
+                {
+                    "detection_id": "ldt:1",
+                    "display_name": "Nested detection",
+                    "status": {"name": "new"},
+                    "device": {"hostname": "detected-host"},
+                    "user_name": {"username": "analyst"},
+                    "behaviors": [{"severity": "High"}],
+                }
+            ],
+            "alerts": [],
+            "identity_alerts": [],
+            "incidents": [],
+            "vulnerabilities": [],
+        }
+    )
+
+    assert normalized["summary"]["total_hosts"] == 1
+    assert normalized["summary"]["critical_or_high_events"] == 1
+    assert normalized["summary"]["top_sources"] == [("detected-host", 1)]
+    assert normalized["summary"]["top_users"] == [("analyst", 1)]
+    assert normalized["groupings"]["hosts_by_platform"] == {"Windows": 1}
