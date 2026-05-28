@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cumulative Cybersecurity Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
+</head>
+<body class="dashboard-page">
+    <main class="page-shell">
+        <section class="page-header">
+            <div>
+                <h1>Cumulative Cybersecurity Dashboard</h1>
+                <p class="subtitle">High-level security posture from BitSight and CrowdStrike Falcon.</p>
+            </div>
+        </section>
+
+        <section class="tool-grid">
+            <article class="tool-card">
+                <div class="tool-header">
+                    <div class="tool-title">
+                        <div class="tool-icon">BS</div>
+                        <div>
+                            <h2>BitSight</h2>
+                            <p class="muted">{{ bitsight.company_name }}</p>
+                        </div>
+                    </div>
+                    <span class="badge risk-{{ bitsight.risk_level|lower }}">{{ bitsight.risk_level }}</span>
+                </div>
+
+                {% if bitsight.error %}
+                    <p class="status">{{ bitsight.error }}</p>
+                {% else %}
+                    <div class="metric-grid">
+                        <div class="metric-tile">
+                            <div class="label">Security Rating</div>
+                            <div class="metric-large">{{ bitsight.score }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Rating Date</div>
+                            <div class="metric-value">{{ bitsight.rating_date }}</div>
+                        </div>
+                    </div>
+                    <p class="tool-copy status">{{ bitsight.status }}</p>
+                {% endif %}
+
+                <a class="tool-link" href="/bitsight/summary">Open BitSight dashboard</a>
+            </article>
+
+            <article class="tool-card">
+                <div class="tool-header">
+                    <div class="tool-title">
+                        <div class="tool-icon">CS</div>
+                        <div>
+                            <h2>CrowdStrike</h2>
+                            <p class="muted">Falcon operational telemetry</p>
+                        </div>
+                    </div>
+                    <span class="badge {{ crowdstrike.risk_level|lower }}">{{ crowdstrike.risk_level }}</span>
+                </div>
+
+                {% if crowdstrike.error %}
+                    <p class="status">{{ crowdstrike.error }}</p>
+                {% else %}
+                    <div class="metric-grid">
+                        <div class="metric-tile">
+                            <div class="label">Hosts</div>
+                            <div class="metric-large">{{ crowdstrike.total_hosts }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Security Events</div>
+                            <div class="metric-large">{{ crowdstrike.total_security_events }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Critical / High</div>
+                            <div class="metric-large">{{ crowdstrike.critical_or_high_events }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Vulnerabilities</div>
+                            <div class="metric-large">{{ crowdstrike.total_vulnerabilities }}</div>
+                        </div>
+                    </div>
+                    <p class="tool-copy status">{{ crowdstrike.status }}</p>
+                {% endif %}
+
+                <a class="tool-link" href="/crowdstrike/dashboard">Open CrowdStrike dashboard</a>
+            </article>
+        </section>
+    </main>
+</body>
+</html>

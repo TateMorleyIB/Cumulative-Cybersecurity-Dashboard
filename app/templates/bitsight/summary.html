@@ -1,9 +1,13 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
   <head>
-    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}" /> <title>BitSight Summary</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}" />
+    <title>BitSight Summary</title>
   </head>
 
-  <body>
+  <body class="centered-page">
     <section class="card">
       <img class="bitsight-watermark" src="/assets/bitsight_logo.jpg" alt="" aria-hidden="true" />
 
@@ -16,6 +20,7 @@
               <p class="subtitle">BitSight Security Rating Dashboard</p>
             </div>
           </div>
+          <a class="nav-link" href="/dashboard">Master dashboard</a>
         </div>
 
         <div class="stats">
