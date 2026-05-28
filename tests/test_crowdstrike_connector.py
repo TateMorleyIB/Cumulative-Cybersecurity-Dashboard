@@ -89,13 +89,38 @@ def test_identity_alerts_use_unified_alerts_api(monkeypatch):
     assert crowdstrike.get_identity_alerts() == [{"id": "identity-alert"}]
 
 
-def test_vulnerability_query_uses_spotlight_limit_and_pipe_sort(monkeypatch):
+def test_vulnerability_query_uses_filtered_combined_spotlight_endpoint(monkeypatch):
     crowdstrike = connector()
+    calls = []
+
+    def fake_query(path, limit, sort=None, filter_query=None):
+        calls.append((path, limit, sort, filter_query))
+        return {"resources": [{"id": "vulnerability-1"}]}
+
+    monkeypatch.setattr(crowdstrike, "_query", fake_query)
+
+    assert crowdstrike.get_vulnerabilities(limit=500) == [{"id": "vulnerability-1"}]
+    assert calls == [
+        (
+            "/spotlight/combined/vulnerabilities/v1",
+            400,
+            None,
+            "last_seen_within:'90'",
+        )
+    ]
+
+
+def test_vulnerability_query_falls_back_to_filtered_id_lookup(monkeypatch):
+    crowdstrike = connector()
+
+    def fake_query_combined_vulnerabilities(limit, filter_query):
+        raise http_error(400)
 
     def fake_query_ids_with_fallbacks(path, limit, sorts, filter_query=None):
         assert path == "/spotlight/queries/vulnerabilities/v1"
         assert limit == 400
         assert sorts[0] == "updated_timestamp|desc"
+        assert filter_query == "last_seen_within:'90'"
         return ["vulnerability-1"]
 
     def fake_fetch_entities_post(path, ids, id_key="ids"):
@@ -104,6 +129,11 @@ def test_vulnerability_query_uses_spotlight_limit_and_pipe_sort(monkeypatch):
         assert id_key == "ids"
         return [{"id": "vulnerability-1"}]
 
+    monkeypatch.setattr(
+        crowdstrike,
+        "_query_combined_vulnerabilities",
+        fake_query_combined_vulnerabilities,
+    )
     monkeypatch.setattr(crowdstrike, "_query_ids_with_fallbacks", fake_query_ids_with_fallbacks)
     monkeypatch.setattr(crowdstrike, "_fetch_entities_post", fake_fetch_entities_post)
 

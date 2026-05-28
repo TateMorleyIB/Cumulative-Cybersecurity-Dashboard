@@ -6,7 +6,12 @@ from typing import Any
 
 import requests
 
-from app.config import CROWDSTRIKE_BASE_URL, CROWDSTRIKE_CLIENT_ID, CROWDSTRIKE_SECRET
+from app.config import (
+    CROWDSTRIKE_BASE_URL,
+    CROWDSTRIKE_CLIENT_ID,
+    CROWDSTRIKE_SECRET,
+    CROWDSTRIKE_VULNERABILITY_FILTER,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_FILE = PROJECT_ROOT / "data" / "raw" / "crowdstrike" / "crowdstrike_snapshot.json"
@@ -20,6 +25,13 @@ DEFAULT_LIMITS = {
     "incidents": 250,
     "vulnerabilities": 400,
 }
+DEFAULT_VULNERABILITY_FILTER = "last_seen_within:'90'"
+VULNERABILITY_FALLBACK_FILTERS = [
+    DEFAULT_VULNERABILITY_FILTER,
+    "last_seen_within:'45'",
+    "last_seen_within:'30'",
+    "status:['open','reopen']",
+]
 SEVERITY_ORDER = {
     "critical": 5,
     "high": 4,
@@ -262,14 +274,64 @@ class CrowdStrikeConnector:
     def get_vulnerabilities(
         self, limit: int = DEFAULT_LIMITS["vulnerabilities"]
     ) -> list[dict[str, Any]]:
-        # Spotlight caps this query at 400 and uses pipe-delimited sort direction.
+        # Spotlight rejects unfiltered vulnerability searches in some tenants. Use
+        # the combined endpoint first so the dashboard gets meaningful vulnerability
+        # details in one call, then fall back to ID query + entity hydration.
         safe_limit = min(limit, 400)
-        ids = self._query_ids_with_fallbacks(
-            "/spotlight/queries/vulnerabilities/v1",
-            safe_limit,
-            sorts=["updated_timestamp|desc", "created_timestamp|desc", None],
+        filters = self._vulnerability_filters()
+        last_error: requests.HTTPError | None = None
+
+        for filter_query in filters:
+            try:
+                combined = self._query_combined_vulnerabilities(
+                    safe_limit, filter_query=filter_query
+                )
+                if combined:
+                    return combined
+            except requests.HTTPError as error:
+                last_error = error
+                if error.response is None or error.response.status_code != 400:
+                    raise
+
+        for filter_query in filters:
+            try:
+                ids = self._query_ids_with_fallbacks(
+                    "/spotlight/queries/vulnerabilities/v1",
+                    safe_limit,
+                    sorts=["updated_timestamp|desc", "created_timestamp|desc", None],
+                    filter_query=filter_query,
+                )
+                return self._fetch_entities_post(
+                    "/spotlight/entities/vulnerabilities/v2", ids
+                )
+            except requests.HTTPError as error:
+                last_error = error
+                if error.response is None or error.response.status_code != 400:
+                    raise
+
+        if last_error:
+            raise last_error
+        return []
+
+    def _query_combined_vulnerabilities(
+        self, limit: int, filter_query: str
+    ) -> list[dict[str, Any]]:
+        data = self._query(
+            "/spotlight/combined/vulnerabilities/v1",
+            limit,
+            filter_query=filter_query,
         )
-        return self._fetch_entities_post("/spotlight/entities/vulnerabilities/v2", ids)
+        return [item for item in data.get("resources", []) if isinstance(item, dict)]
+
+    @staticmethod
+    def _vulnerability_filters() -> list[str]:
+        filters = []
+        if CROWDSTRIKE_VULNERABILITY_FILTER:
+            filters.append(CROWDSTRIKE_VULNERABILITY_FILTER)
+        for filter_query in VULNERABILITY_FALLBACK_FILTERS:
+            if filter_query not in filters:
+                filters.append(filter_query)
+        return filters
 
     def get_snapshot(
         self, use_cache: bool = True, limits: dict[str, int] | None = None
