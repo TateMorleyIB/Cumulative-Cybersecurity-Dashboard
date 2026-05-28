@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrowdStrike Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
+</head>
+<body class="dashboard-page">
+<div class="page-shell">
+    <section class="page-header">
+        <div>
+            <p class="page-kicker">CrowdStrike Falcon</p>
+            <h1>CrowdStrike Dashboard</h1>
+            <p class="subtitle">Generated {{ generated_at }} from {{ base_url }}. Cached snapshots are reused briefly to avoid excessive API calls.</p>
+        </div>
+        <a class="nav-link" href="/dashboard">← Master dashboard</a>
+    </section>
+
+    {% if errors %}
+    <div class="dashboard-card errors">
+        <strong>Some CrowdStrike scopes or endpoints did not return data:</strong>
+        <ul>
+            {% for name, message in errors.items() %}<li><strong>{{ name }}:</strong> {{ message }}</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="metric-grid">
+        <div class="metric-tile"><div class="label">Hosts</div><div class="metric-large">{{ summary.total_hosts }}</div></div>
+        <div class="metric-tile"><div class="label">Stale Hosts</div><div class="metric-large">{{ summary.stale_hosts }}</div></div>
+        <div class="metric-tile"><div class="label">Security Events</div><div class="metric-large">{{ summary.total_security_events }}</div></div>
+        <div class="metric-tile"><div class="label">Vulnerabilities</div><div class="metric-large">{{ summary.total_vulnerabilities }}</div></div>
+        <div class="metric-tile"><div class="label">Critical / High</div><div class="metric-large">{{ summary.critical_or_high_events }}</div></div>
+    </div>
+
+    <div class="tool-grid section">
+        <div class="dashboard-card">
+            <h2>Events by Severity</h2>
+            <ul class="pill-list">
+                {% for severity, count in summary.severity_counts.items() %}<li>{{ severity }}: {{ count }}</li>{% endfor %}
+            </ul>
+        </div>
+        <div class="dashboard-card">
+            <h2>Events by Type</h2>
+            <ul class="pill-list">
+                {% for type, count in summary.event_type_counts.items() %}<li>{{ type }}: {{ count }}</li>{% endfor %}
+            </ul>
+        </div>
+        <div class="dashboard-card">
+            <h2>Hosts by Platform</h2>
+            <ul class="pill-list">
+                {% for platform, count in groupings.hosts_by_platform.items() %}<li>{{ platform }}: {{ count }}</li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="dashboard-card section">
+        <h2>Most Recent Security Events</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Title</th><th>Source</th><th>User</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for event in events[:50] %}
+                    <tr>
+                        <td>{{ event.timestamp or "Unknown" }}</td>
+                        <td><span class="badge {{ event.severity }}">{{ event.severity }}</span></td>
+                        <td>{{ event.type }}</td>
+                        <td>{{ event.title }}{% if event.cve %}<br><span class="muted">{{ event.cve }} CVSS {{ event.cvss_score or "n/a" }}</span>{% endif %}</td>
+                        <td>{{ event.source or "Unknown" }}</td>
+                        <td>{{ event.user or "" }}</td>
+                        <td>{{ event.status or "Unknown" }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="dashboard-card section">
+        <h2>Hosts</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Hostname</th><th>Platform</th><th>OS</th><th>Last Seen</th><th>Local IP</th><th>Agent</th></tr></thead>
+                <tbody>
+                {% for host in hosts[:100] %}
+                    <tr>
+                        <td>{{ host.hostname }}</td>
+                        <td>{{ host.platform or "Unknown" }}</td>
+                        <td>{{ host.os_version or "" }}</td>
+                        <td>{{ host.last_seen or "Unknown" }}</td>
+                        <td>{{ host.local_ip or "" }}</td>
+                        <td>{{ host.agent_version or "" }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>
