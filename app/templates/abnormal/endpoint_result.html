@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ endpoint.label }} | Abnormal API</title>
+    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
+</head>
+<body class="dashboard-page overview-page">
+    <main class="page-shell overview-shell">
+        <section class="glass-hero compact-hero">
+            <div>
+                <p class="page-kicker">Abnormal Security endpoint</p>
+                <h1>{{ endpoint.label }}</h1>
+                <p class="subtitle"><span class="method-badge method-{{ endpoint.method|lower }}">{{ endpoint.method }}</span> <code>{{ endpoint.path }}</code></p>
+            </div>
+            <div class="hero-actions">
+                <a class="nav-link" href="/abnormal/endpoints">Back to endpoints</a>
+                <a class="nav-link" href="/abnormal/{{ endpoint.key }}?format=json">Raw JSON</a>
+            </div>
+        </section>
+
+        <section class="endpoint-result-grid">
+            <article class="dashboard-card glass-card endpoint-result-card">
+                <div class="endpoint-group-header">
+                    <div>
+                        <p class="page-kicker">{{ summary.count }} item{% if summary.count != 1 %}s{% endif %}</p>
+                        <h2>{{ summary.title }}</h2>
+                    </div>
+                </div>
+
+                {% if summary.records and summary.columns %}
+                    <div class="table-wrap endpoint-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    {% for column in summary.columns %}
+                                        <th>{{ column.replace('_', ' ') }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in summary.records %}
+                                    <tr>
+                                        {% for column in summary.columns %}
+                                            <td>{{ display_value(record.get(column)) }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if summary.count > summary.records|length %}
+                        <p class="muted small-copy endpoint-note">Showing the first {{ summary.records|length }} records. Use Raw JSON for the complete response.</p>
+                    {% endif %}
+                {% else %}
+                    <p class="muted">This endpoint returned no tabular records. Use Raw JSON to inspect the complete response.</p>
+                {% endif %}
+            </article>
+
+            <article class="dashboard-card glass-card endpoint-result-card">
+                <div class="endpoint-group-header">
+                    <div>
+                        <p class="page-kicker">Raw payload</p>
+                        <h2>Formatted JSON</h2>
+                    </div>
+                </div>
+                <pre class="json-preview"><code>{{ result_json }}</code></pre>
+            </article>
+        </section>
+    </main>
+</body>
+</html>

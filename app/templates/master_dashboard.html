@@ -6,18 +6,157 @@
     <title>Cumulative Cybersecurity Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
 </head>
-<body class="dashboard-page">
-    <main class="page-shell">
-        <section class="page-header">
+<body class="dashboard-page overview-page">
+    <main class="page-shell overview-shell">
+        <section class="glass-hero">
             <div>
                 <p class="page-kicker">Unified security observation deck</p>
-                <h1>Cumulative Cybersecurity Dashboard</h1>
-                <p class="subtitle">High-level security posture from BitSight ratings and CrowdStrike Falcon telemetry in one clean view.</p>
+                <h1>Glass-pane cybersecurity overview</h1>
+                <p class="subtitle">Executive signal across vendor risk, endpoint telemetry, and Abnormal email security in a high-level operational pane.</p>
+            </div>
+            <div class="hero-actions">
+                <a class="nav-link" href="/abnormal/snapshot">Abnormal API snapshot</a>
+                <a class="nav-link" href="/crowdstrike/dashboard">CrowdStrike details</a>
             </div>
         </section>
 
-        <section class="tool-grid">
-            <article class="tool-card">
+        <section class="overview-metrics" aria-label="High level cybersecurity metrics">
+            <div class="glass-metric">
+                <span class="label">BitSight Rating</span>
+                <strong>{{ bitsight.score }}</strong>
+                <small>{{ bitsight.risk_level }} vendor risk</small>
+            </div>
+            <div class="glass-metric">
+                <span class="label">Endpoint Events</span>
+                <strong>{{ crowdstrike.total_security_events }}</strong>
+                <small>{{ crowdstrike.critical_or_high_events }} critical / high</small>
+            </div>
+            <div class="glass-metric accent-metric">
+                <span class="label">Observed Threats</span>
+                <strong>{{ abnormal.total_threats }}</strong>
+                <small>{{ abnormal.stopped_attacks }} attacks stopped</small>
+            </div>
+            <div class="glass-metric">
+                <span class="label">Abuse Queue</span>
+                <strong>{{ abnormal.not_analyzed }}</strong>
+                <small>{{ abnormal.open_cases }} open Abnormal cases</small>
+            </div>
+        </section>
+
+        <section class="tool-grid overview-grid">
+            <article class="tool-card glass-card featured-card">
+                <div class="tool-header">
+                    <div class="tool-title">
+                        <div class="product-mark abnormal">AB</div>
+                        <div>
+                            <h2>Abnormal Security</h2>
+                            <p class="muted">Email threat protection and abuse mailbox triage</p>
+                        </div>
+                    </div>
+                    <span class="badge risk-{{ abnormal.risk_level|lower }}">{{ abnormal.risk_level }}</span>
+                </div>
+
+                {% if abnormal.error %}
+                    <p class="status">{{ abnormal.error }}</p>
+                {% else %}
+                    <div class="metric-grid compact-metrics">
+                        <div class="metric-tile">
+                            <div class="label">Observed Threats</div>
+                            <div class="metric-large">{{ abnormal.total_threats }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Stopped Attacks</div>
+                            <div class="metric-large">{{ abnormal.stopped_attacks }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Cases</div>
+                            <div class="metric-large">{{ abnormal.open_cases }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">IOCs</div>
+                            <div class="metric-large">{% if abnormal.ioc_unavailable %}—{% else %}{{ abnormal.ioc_count }}{% endif %}</div>
+                            {% if abnormal.ioc_unavailable %}<small class="metric-note">Feature not enabled</small>{% endif %}
+                        </div>
+                    </div>
+                    <p class="tool-copy status">{{ abnormal.status }}</p>
+                    {% if abnormal.collection_warning_count %}
+                        <p class="status-note">Some Abnormal widgets are unavailable because {{ abnormal.collection_warning_count }} endpoint collection warning(s) occurred. Available metrics are still shown.</p>
+                    {% endif %}
+
+                    <div class="insight-columns expanded-insights">
+                        <div>
+                            <h3>Trending attacks</h3>
+                            {% if abnormal.trending_attacks %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.trending_attacks[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% elif abnormal.has_trending_error %}
+                                <p class="muted small-copy">Trending attack data is unavailable due to a collection warning.</p>
+                            {% else %}
+                                <p class="muted small-copy">No trending attack buckets returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h3>Attack vectors</h3>
+                            {% if abnormal.attack_vectors %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.attack_vectors[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% elif abnormal.has_vector_error %}
+                                <p class="muted small-copy">Attack vector data is unavailable due to a collection warning.</p>
+                            {% else %}
+                                <p class="muted small-copy">No vector breakdown returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h3>Attack strategies</h3>
+                            {% if abnormal.attack_strategies %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.attack_strategies[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No attack strategy breakdown returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h3>Top recipients</h3>
+                            {% if abnormal.recipient_employees %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.recipient_employees[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No recipient aggregation returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if abnormal.recent_abuse_reports %}
+                        <div class="section compact-section">
+                            <h3>Recent abuse mailbox items awaiting analysis</h3>
+                            <ul class="signal-list abuse-list">
+                                {% for item in abnormal.recent_abuse_reports[:4] %}
+                                    <li>
+                                        <span>{{ item.subject }}</span>
+                                        <small>Review status: {{ item.reason }}{% if item.reported_at %} · {{ item.reported_at[:10] }}{% endif %}{% if item.reporter %} · {{ item.reporter }}{% endif %}</small>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                {% endif %}
+
+                <a class="tool-link" href="/abnormal/endpoints">Browse Abnormal API endpoints →</a>
+            </article>
+
+            <article class="tool-card glass-card">
                 <div class="tool-header">
                     <div class="tool-title">
                         <div class="product-mark bitsight">BS</div>
@@ -48,7 +187,7 @@
                 <a class="tool-link" href="/bitsight/summary">Open BitSight dashboard →</a>
             </article>
 
-            <article class="tool-card">
+            <article class="tool-card glass-card">
                 <div class="tool-header">
                     <div class="tool-title">
                         <div class="product-mark crowdstrike">CS</div>
@@ -69,7 +208,7 @@
                             <div class="metric-large">{{ crowdstrike.total_hosts }}</div>
                         </div>
                         <div class="metric-tile">
-                            <div class="label">Security Events</div>
+                            <div class="label">Events</div>
                             <div class="metric-large">{{ crowdstrike.total_security_events }}</div>
                         </div>
                         <div class="metric-tile">
