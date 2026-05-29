@@ -146,6 +146,15 @@ class AbnormalConnector:
     """Collects high-level Abnormal Security telemetry for the dashboard."""
 
     def __init__(self, cache_ttl: timedelta = CACHE_TTL):
+        """
+        Initialize the Abnormal API connector session and cache settings.
+
+        Args:
+            cache_ttl: Maximum age for the local snapshot cache before the connector refreshes API data.
+
+        Raises:
+            ValueError: Raised when ``ABNORMAL_API_KEY`` is not configured.
+        """
         if not ABNORMAL_API_KEY:
             raise ValueError("ABNORMAL_API_KEY is missing from .env")
 
@@ -167,6 +176,20 @@ class AbnormalConnector:
         )
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
+        """
+        Send an Abnormal API request and decode the JSON response.
+
+        Args:
+            method: HTTP method such as ``GET`` or ``POST``.
+            path: Upstream path relative to the configured Abnormal base URL.
+            **kwargs: Additional ``requests`` options such as params or JSON payload.
+
+        Returns:
+            Any: Decoded JSON payload, or an empty dictionary when the response body is empty.
+
+        Raises:
+            requests.HTTPError: Propagated when the upstream API returns an error status.
+        """
         response = self._send_request(method, path, **kwargs)
         response.raise_for_status()
         if not response.content:
@@ -177,6 +200,20 @@ class AbnormalConnector:
         return response.json()
 
     def _send_request(self, method: str, path: str, **kwargs) -> requests.Response:
+        """
+        Send a prepared HTTP request with optional TLS fallback behavior.
+
+        Args:
+            method: HTTP method for the Abnormal request.
+            path: Upstream path relative to the connector base URL.
+            **kwargs: Additional ``requests`` options forwarded to the session.
+
+        Returns:
+            requests.Response: Raw response object after a successful request.
+
+        Raises:
+            SSLError: Re-raised when certificate verification fails and insecure fallback is disabled.
+        """
         kwargs.setdefault("verify", self.verify)
         try:
             return self.session.request(
@@ -202,15 +239,40 @@ class AbnormalConnector:
             )
 
     def _can_retry_without_ssl_verification(self, current_verify: bool | str) -> bool:
+        """
+        Determine whether an SSL failure may be retried without certificate verification.
+
+        Args:
+            current_verify: Current requests ``verify`` value.
+
+        Returns:
+            bool: True when policy permits a fallback retry with ``verify=False``.
+        """
         return bool(self.allow_insecure_ssl_fallback and current_verify is not False)
 
     def _resolve_verify_setting(self) -> bool | str:
+        """
+        Resolve the configured certificate verification setting for Abnormal requests.
+
+        Returns:
+            bool | str: Either a boolean verification flag or a custom CA bundle path.
+        """
         if ABNORMAL_CA_BUNDLE:
             return ABNORMAL_CA_BUNDLE
         return self._env_flag(ABNORMAL_VERIFY_SSL, default=True)
 
     @staticmethod
     def _env_flag(value: str | None, default: bool) -> bool:
+        """
+        Parse a boolean-like environment value.
+
+        Args:
+            value: Raw environment string, if present.
+            default: Fallback value used when the string is unset.
+
+        Returns:
+            bool: Parsed boolean value.
+        """
         if value is None or value == "":
             return default
         return value.strip().lower() not in {"0", "false", "no", "off"}
@@ -222,6 +284,20 @@ class AbnormalConnector:
         params: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> Any:
+        """
+        Call any endpoint listed in ``ACCESSIBLE_ENDPOINTS``.
+
+        Args:
+            endpoint_key: Friendly endpoint key configured in the connector map.
+            params: Optional query string parameters, including path parameter replacements.
+            payload: Optional JSON body for POST endpoints.
+
+        Returns:
+            Any: Decoded JSON response from the selected Abnormal endpoint.
+
+        Raises:
+            ValueError: Raised for unknown endpoints or missing path parameters.
+        """
         if endpoint_key not in ACCESSIBLE_ENDPOINTS:
             raise ValueError(f"Unknown Abnormal endpoint: {endpoint_key}")
         method, path_template = ACCESSIBLE_ENDPOINTS[endpoint_key]
@@ -248,6 +324,15 @@ class AbnormalConnector:
         return self._request(method, path, **kwargs)
 
     def get_snapshot(self, use_cache: bool = True) -> dict[str, Any]:
+        """
+        Collect or read the multi-endpoint Abnormal snapshot.
+
+        Args:
+            use_cache: When true, use a fresh local cache if available and valid.
+
+        Returns:
+            dict[str, Any]: Snapshot containing raw endpoint payloads, normalized dashboard data, and any endpoint issues.
+        """
         if use_cache:
             cached = self._read_cache()
             if cached:
@@ -282,11 +367,26 @@ class AbnormalConnector:
         return snapshot
 
     def _default_kwargs(self, key: str) -> dict[str, Any]:
+        """
+        Return default request options for a high-level Abnormal endpoint.
+
+        Args:
+            key: Endpoint key from ``HIGH_LEVEL_ENDPOINTS``.
+
+        Returns:
+            dict[str, Any]: Request keyword arguments such as default limits.
+        """
         if key in {"threats", "cases", "iocs"}:
             return {"params": {"limit": DEFAULT_LIMITS[key]}}
         return {}
 
     def _read_cache(self) -> dict[str, Any] | None:
+        """
+        Read a valid Abnormal snapshot from disk when available.
+
+        Returns:
+            dict[str, Any] | None: Cached snapshot when fresh and usable; otherwise ``None``.
+        """
         try:
             if not CACHE_FILE.exists():
                 return None
@@ -311,11 +411,29 @@ class AbnormalConnector:
             return None
 
     def _is_unusable_error_snapshot(self, snapshot: dict[str, Any]) -> bool:
+        """
+        Detect cache payloads that contain only endpoint failures.
+
+        Args:
+            snapshot: Cached snapshot dictionary to inspect.
+
+        Returns:
+            bool: True when all endpoint collections failed and cache reuse should be avoided.
+        """
         return not snapshot.get("raw") and bool(snapshot.get("errors"))
 
     def _split_endpoint_issues(
         self, errors: dict[str, str]
     ) -> tuple[dict[str, str], dict[str, str]]:
+        """
+        Separate hard endpoint errors from optional-feature notices.
+
+        Args:
+            errors: Mapping of endpoint key to formatted error message.
+
+        Returns:
+            tuple[dict[str, str], dict[str, str]]: Hard errors first, optional notices second.
+        """
         blocking_errors: dict[str, str] = {}
         notices: dict[str, str] = {}
         for key, message in errors.items():
@@ -326,16 +444,44 @@ class AbnormalConnector:
         return blocking_errors, notices
 
     def _is_optional_feature_unavailable(self, key: str, message: str) -> bool:
+        """
+        Classify whether an endpoint failure represents a disabled optional feature.
+
+        Args:
+            key: Endpoint key that failed.
+            message: Formatted upstream error message.
+
+        Returns:
+            bool: True when the failure should be shown as a notice rather than a collection error.
+        """
         normalized = str(message).lower()
         return key == "iocs" and "403" in normalized and "not enabled" in normalized
 
     def _write_cache(self, snapshot: dict[str, Any]) -> None:
+        """
+        Persist a usable Abnormal snapshot to disk.
+
+        Args:
+            snapshot: Snapshot payload to write as formatted JSON.
+
+        Returns:
+            None: This method performs filesystem side effects only.
+        """
         if self._is_unusable_error_snapshot(snapshot):
             return
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         CACHE_FILE.write_text(json.dumps(snapshot, indent=2, default=str))
 
     def normalize(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize raw Abnormal endpoint payloads for dashboard rendering.
+
+        Args:
+            raw: Mapping of endpoint keys to raw decoded API payloads.
+
+        Returns:
+            dict[str, Any]: Summary metrics, normalized records, aggregation buckets, and display status.
+        """
         dashboard_summary = raw.get("dashboard_summary", {})
         threats = self._extract_records(raw.get("threats", {}))
         cases = self._extract_records(raw.get("cases", {}))
@@ -429,6 +575,15 @@ class AbnormalConnector:
         }
 
     def _risk_level(self, summary: dict[str, int]) -> str:
+        """
+        Derive an Abnormal dashboard risk level from summary counters.
+
+        Args:
+            summary: Normalized Abnormal summary counters.
+
+        Returns:
+            str: One of ``High``, ``Moderate``, or ``Low``.
+        """
         if summary.get("not_analyzed", 0) > 0 or summary.get("open_cases", 0) >= 10:
             return "High"
         if summary.get("total_threats", 0) > 0 or summary.get("open_cases", 0) > 0:
@@ -436,6 +591,15 @@ class AbnormalConnector:
         return "Low"
 
     def _status(self, summary: dict[str, int]) -> str:
+        """
+        Build a human-readable Abnormal status line from summary counters.
+
+        Args:
+            summary: Normalized Abnormal summary counters.
+
+        Returns:
+            str: Concise operational status suitable for dashboard display.
+        """
         if summary.get("not_analyzed", 0) > 0:
             return f"{summary['not_analyzed']} abuse mailbox item(s) awaiting analysis"
         if summary.get("open_cases", 0) > 0:
@@ -445,6 +609,15 @@ class AbnormalConnector:
         return "No active Abnormal email security signal in the current snapshot"
 
     def _normalize_threat(self, threat: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one Abnormal threat record.
+
+        Args:
+            threat: Raw threat object from the Abnormal API.
+
+        Returns:
+            dict[str, Any]: Stable threat fields used by dashboard templates.
+        """
         return {
             "id": self._first(threat, "threatId", "threat_id", "id"),
             "subject": self._first(threat, "subject", "summary", "attackType", "type")
@@ -458,9 +631,28 @@ class AbnormalConnector:
         }
 
     def _attack_frequency(self, payload: Any, limit: int = 14) -> list[dict[str, Any]]:
+        """
+        Normalize Abnormal attack frequency buckets.
+
+        Args:
+            payload: Raw aggregation payload from Abnormal.
+            limit: Maximum number of buckets to return.
+
+        Returns:
+            list[dict[str, Any]]: Date or label buckets with counts.
+        """
         return self._top_buckets(payload, limit=limit, record_key="attack_frequency")
 
     def _normalize_abuse_report(self, item: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one abuse mailbox item.
+
+        Args:
+            item: Raw abuse mailbox record from Abnormal.
+
+        Returns:
+            dict[str, Any]: Stable subject, reporter, timestamp, and reason fields.
+        """
         reporter = (
             item.get("reporter") if isinstance(item.get("reporter"), dict) else {}
         )
@@ -475,12 +667,32 @@ class AbnormalConnector:
         }
 
     def _payload_for_key(self, raw: dict[str, Any], key: str) -> Any:
+        """
+        Find the most relevant payload for a normalized endpoint key.
+
+        Args:
+            raw: Mapping of endpoint keys to raw payloads.
+            key: Preferred endpoint key.
+
+        Returns:
+            Any: Direct payload, nested named payload, or an empty dictionary.
+        """
         payload = raw.get(key)
         if payload not in (None, {}, []):
             return payload
         return self._find_named_payload(raw.get("dashboard_summary", {}), key)
 
     def _find_named_payload(self, payload: Any, key: str) -> Any:
+        """
+        Recursively search a payload for a non-empty value under a specific key.
+
+        Args:
+            payload: JSON-compatible object to search.
+            key: Dictionary key to locate.
+
+        Returns:
+            Any: Matching non-empty value, or an empty dictionary when not found.
+        """
         if isinstance(payload, dict):
             if key in payload:
                 return {key: payload[key]}
@@ -496,6 +708,15 @@ class AbnormalConnector:
         return {}
 
     def _format_abuse_reason(self, reason: Any) -> str:
+        """
+        Format an Abnormal abuse mailbox reason code for users.
+
+        Args:
+            reason: Raw reason code or missing value.
+
+        Returns:
+            str: Friendly reason label.
+        """
         reason_text = str(reason or "Unknown")
         return ABUSE_REASON_LABELS.get(
             reason_text, reason_text.replace("_", " ").strip().title() or "Unknown"
@@ -504,6 +725,17 @@ class AbnormalConnector:
     def _top_buckets(
         self, payload: Any, limit: int = 5, record_key: str | None = None
     ) -> list[dict[str, Any]]:
+        """
+        Extract top aggregation buckets from flexible Abnormal payload shapes.
+
+        Args:
+            payload: Raw aggregation payload that may contain lists, nested objects, or numeric counters.
+            limit: Maximum number of buckets to return.
+            record_key: Optional preferred nested record key to inspect first.
+
+        Returns:
+            list[dict[str, Any]]: Label/count dictionaries sorted in source order or by numeric counter frequency.
+        """
         records = self._extract_records(payload, record_key=record_key)
         buckets: list[dict[str, Any]] = []
         for record in records:
@@ -559,6 +791,16 @@ class AbnormalConnector:
     def _extract_records(
         self, payload: Any, record_key: str | None = None
     ) -> list[Any]:
+        """
+        Extract a list of records from common Abnormal response wrappers.
+
+        Args:
+            payload: Raw JSON-compatible payload to inspect.
+            record_key: Optional preferred nested key containing records.
+
+        Returns:
+            list[Any]: Extracted list of records, or an empty list when no records are present.
+        """
         if isinstance(payload, list):
             if record_key:
                 for item in payload:
@@ -611,6 +853,16 @@ class AbnormalConnector:
         return []
 
     def _first_number(self, payload: Any, *keys: str) -> int | None:
+        """
+        Find the first numeric value matching any candidate key.
+
+        Args:
+            payload: JSON-compatible payload to search recursively.
+            *keys: Candidate field names that may contain a number.
+
+        Returns:
+            int | None: First matching integer value, or ``None`` when no numeric value is found.
+        """
         keyset = {key.lower() for key in keys}
         value = self._find_value(payload, keyset)
         if isinstance(value, bool):
@@ -622,6 +874,16 @@ class AbnormalConnector:
         return None
 
     def _find_value(self, payload: Any, keyset: set[str]) -> Any:
+        """
+        Recursively find the first scalar value whose key matches a normalized key set.
+
+        Args:
+            payload: JSON-compatible payload to traverse.
+            keyset: Lowercase normalized key names to match.
+
+        Returns:
+            Any: First scalar matching value, or ``None`` when no match exists.
+        """
         if isinstance(payload, dict):
             for key, value in payload.items():
                 normalized = key.replace("-", "_").lower()
@@ -644,6 +906,16 @@ class AbnormalConnector:
         return None
 
     def _first(self, payload: dict[str, Any], *keys: str) -> Any:
+        """
+        Return the first non-empty value for a set of candidate keys.
+
+        Args:
+            payload: Dictionary to inspect.
+            *keys: Candidate keys in priority order.
+
+        Returns:
+            Any: First non-empty value, or ``None`` if all candidates are missing.
+        """
         for key in keys:
             value = payload.get(key)
             if value not in (None, ""):
@@ -651,6 +923,15 @@ class AbnormalConnector:
         return None
 
     def _format_http_error(self, error: requests.HTTPError) -> str:
+        """
+        Format a requests HTTPError into a concise endpoint error message.
+
+        Args:
+            error: HTTPError raised by the Abnormal request layer.
+
+        Returns:
+            str: Status code and JSON or text error details.
+        """
         response = error.response
         if response is None:
             return str(error)

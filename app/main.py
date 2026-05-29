@@ -14,6 +14,14 @@ app.mount("/assets", StaticFiles(directory="app/templates/assets"), name="assets
 
 
 def build_bitsight_overview():
+    """
+    Build the compact BitSight summary used by the master dashboard.
+
+    Reads the configured BitSight company summary, derives the display risk level from the numeric rating, and converts connector failures into a safe fallback dictionary so the dashboard can still render.
+
+    Returns:
+        dict[str, object]: Dashboard-ready BitSight fields including company name, score, rating date, risk level, status text, and an error message when collection fails.
+    """
     try:
         connector = BitSightConnector()
         summary = connector.get_company_summary()
@@ -53,6 +61,15 @@ def build_bitsight_overview():
 
 
 def build_crowdstrike_overview(use_cache: bool = True):
+    """
+    Build the CrowdStrike summary used by the master dashboard.
+
+    Args:
+        use_cache: When true, allow the connector to reuse a fresh local snapshot instead of contacting CrowdStrike.
+
+    Returns:
+        dict[str, object]: Dashboard-ready endpoint counts, risk level, status text, and collection warnings or errors.
+    """
     try:
         connector = CrowdStrikeConnector()
         snapshot = connector.get_snapshot(use_cache=use_cache)
@@ -97,6 +114,15 @@ def build_crowdstrike_overview(use_cache: bool = True):
 
 
 def build_abnormal_overview(use_cache: bool = True):
+    """
+    Build the Abnormal Security summary used by the master dashboard.
+
+    Args:
+        use_cache: When true, allow the connector to reuse a fresh local snapshot instead of contacting Abnormal.
+
+    Returns:
+        dict[str, object]: Dashboard-ready Abnormal metrics, normalized insight lists, warning flags, and fallback error details.
+    """
     try:
         connector = AbnormalConnector()
         snapshot = connector.get_snapshot(use_cache=use_cache)
@@ -161,10 +187,28 @@ def build_abnormal_overview(use_cache: bool = True):
 
 
 def _path_param_names(path: str) -> list[str]:
+    """
+    Extract FastAPI-style path parameter names from an endpoint template.
+
+    Args:
+        path: Endpoint path that may contain placeholders such as ``/v1/threats/{id}``.
+
+    Returns:
+        list[str]: Parameter names in the order they appear in the path.
+    """
     return [segment.split("}", 1)[0] for segment in path.split("{")[1:]]
 
 
 def summarize_endpoint_result(payload):
+    """
+    Summarize an arbitrary Abnormal endpoint payload for HTML presentation.
+
+    Args:
+        payload: JSON-compatible response object returned by an Abnormal endpoint.
+
+    Returns:
+        dict[str, object]: A title, record count, preview records, and table columns for the endpoint result page.
+    """
     if isinstance(payload, dict):
         for key, value in payload.items():
             if isinstance(value, list):
@@ -187,10 +231,24 @@ def summarize_endpoint_result(payload):
             "records": payload[:25],
             "columns": _record_columns(payload),
         }
-    return {"title": "Response", "count": 1 if payload else 0, "records": [], "columns": []}
+    return {
+        "title": "Response",
+        "count": 1 if payload else 0,
+        "records": [],
+        "columns": [],
+    }
 
 
 def _record_columns(records) -> list[str]:
+    """
+    Determine a compact set of table columns from preview records.
+
+    Args:
+        records: Iterable of response records, usually dictionaries from an API response.
+
+    Returns:
+        list[str]: Up to six unique dictionary keys suitable for a readable browser table.
+    """
     columns: list[str] = []
     for record in records:
         if not isinstance(record, dict):
@@ -204,6 +262,15 @@ def _record_columns(records) -> list[str]:
 
 
 def _display_value(value) -> str:
+    """
+    Format a nested JSON value for display in a compact HTML table cell.
+
+    Args:
+        value: Any JSON-compatible value from an endpoint response.
+
+    Returns:
+        str: Human-readable text that avoids dumping large nested objects into the table.
+    """
     if isinstance(value, dict):
         return ", ".join(f"{key}: {val}" for key, val in list(value.items())[:3])
     if isinstance(value, list):
@@ -214,6 +281,12 @@ def _display_value(value) -> str:
 
 
 def build_abnormal_endpoint_catalog():
+    """
+    Build grouped metadata for the Abnormal endpoint browser.
+
+    Returns:
+        list[dict[str, object]]: Endpoint groups containing display labels, HTTP methods, paths, parameter requirements, and local browser URLs.
+    """
     groups = {
         "Threats & messages": [],
         "Aggregations & dashboard": [],
@@ -271,6 +344,16 @@ def build_abnormal_endpoint_catalog():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def get_master_dashboard(request: Request, use_cache: bool = True):
+    """
+    Render the unified dashboard HTML page.
+
+    Args:
+        request: FastAPI request object required by the Jinja template renderer.
+        use_cache: When true, permits connector-level cache reuse for supported tools.
+
+    Returns:
+        TemplateResponse: Rendered master dashboard populated with BitSight, CrowdStrike, and Abnormal summaries.
+    """
     return templates.TemplateResponse(
         request=request,
         name="master_dashboard.html",
@@ -284,6 +367,12 @@ def get_master_dashboard(request: Request, use_cache: bool = True):
 
 @app.get("/")
 def root():
+    """
+    Return basic API health and navigation metadata.
+
+    Returns:
+        dict[str, str]: Status message and the primary dashboard route.
+    """
     return {
         "status": "running",
         "message": "Cybersecurity Dashboard API Online",
@@ -298,6 +387,18 @@ def root():
 ###
 @app.get("/abnormal/snapshot")
 def get_abnormal_snapshot(use_cache: bool = True):
+    """
+    Return the raw Abnormal snapshot payload used by dashboard widgets.
+
+    Args:
+        use_cache: When true, permits reuse of a fresh Abnormal snapshot cache.
+
+    Returns:
+        dict[str, object]: Snapshot metadata, raw endpoint payloads, normalized data, and collection issues.
+
+    Raises:
+        HTTPException: Raised with status 500 when the connector cannot collect a snapshot.
+    """
     try:
         connector = AbnormalConnector()
         return connector.get_snapshot(use_cache=use_cache)
@@ -307,6 +408,15 @@ def get_abnormal_snapshot(use_cache: bool = True):
 
 @app.get("/abnormal/endpoints", response_class=HTMLResponse)
 def get_abnormal_endpoints(request: Request):
+    """
+    Render the Abnormal endpoint browser.
+
+    Args:
+        request: FastAPI request object required by the Jinja template renderer.
+
+    Returns:
+        TemplateResponse: HTML endpoint catalog grouped by functional area.
+    """
     return templates.TemplateResponse(
         request=request,
         name="abnormal/endpoints.html",
@@ -316,6 +426,12 @@ def get_abnormal_endpoints(request: Request):
 
 @app.get("/abnormal/endpoints.json")
 def get_abnormal_endpoints_json():
+    """
+    Return machine-readable Abnormal endpoint metadata.
+
+    Returns:
+        dict[str, dict[str, str]]: Mapping of endpoint keys to HTTP methods and upstream paths.
+    """
     return {
         key: {"method": method, "path": path}
         for key, (method, path) in ACCESSIBLE_ENDPOINTS.items()
@@ -323,7 +439,23 @@ def get_abnormal_endpoints_json():
 
 
 @app.get("/abnormal/{endpoint_key}")
-def get_abnormal_endpoint(endpoint_key: str, request: Request, format: str | None = None):
+def get_abnormal_endpoint(
+    endpoint_key: str, request: Request, format: str | None = None
+):
+    """
+    Proxy a configured Abnormal endpoint and optionally render an HTML preview.
+
+    Args:
+        endpoint_key: Key from ``ACCESSIBLE_ENDPOINTS`` identifying the upstream endpoint.
+        request: FastAPI request carrying query parameters and accept headers.
+        format: Optional output override; ``json`` forces a raw JSON response.
+
+    Returns:
+        dict[str, object] | list[object] | TemplateResponse: Raw endpoint payload for API clients or an HTML summary for browsers.
+
+    Raises:
+        HTTPException: Raised with status 404 for unknown endpoints or 500 for connector failures.
+    """
     try:
         connector = AbnormalConnector()
         query_params = dict(request.query_params)
@@ -356,6 +488,19 @@ def get_abnormal_endpoint(endpoint_key: str, request: Request, format: str | Non
 
 @app.post("/abnormal/{endpoint_key}")
 async def post_abnormal_endpoint(endpoint_key: str, request: Request):
+    """
+    Proxy POST requests to a configured Abnormal endpoint.
+
+    Args:
+        endpoint_key: Key from ``ACCESSIBLE_ENDPOINTS`` identifying the upstream POST endpoint.
+        request: FastAPI request containing JSON body and optional query parameters.
+
+    Returns:
+        Any: JSON-compatible Abnormal response payload.
+
+    Raises:
+        HTTPException: Raised with status 404 for unknown endpoints or 500 for connector failures.
+    """
     try:
         connector = AbnormalConnector()
         payload = await request.json()
@@ -375,6 +520,15 @@ async def post_abnormal_endpoint(endpoint_key: str, request: Request):
 ###
 @app.get("/bitsight/logo")
 def get_bitsight_logo():
+    """
+    Return the cached or freshly fetched BitSight company logo image.
+
+    Returns:
+        Response: Binary image response using the upstream content type.
+
+    Raises:
+        HTTPException: Raised with status 404 when no logo is available or 500 for connector errors.
+    """
     try:
         connector = BitSightConnector()
         image, content_type = connector.get_company_logo_image()
@@ -392,6 +546,15 @@ def get_bitsight_logo():
 
 @app.get("/bitsight/sparkline")
 def get_bitsight_sparkline():
+    """
+    Return the cached or freshly fetched BitSight sparkline image.
+
+    Returns:
+        Response: Binary image response used by dashboard ``img`` elements sized to 60x20 pixels.
+
+    Raises:
+        HTTPException: Raised with status 404 when no sparkline is available or 500 for connector errors.
+    """
     try:
         connector = BitSightConnector()
         image, content_type = connector.get_company_sparkline_image()
@@ -409,7 +572,18 @@ def get_bitsight_sparkline():
 
 @app.get("/bitsight/summary", response_class=HTMLResponse)
 def get_bitsight_summary(request: Request):
+    """
+    Render the BitSight summary dashboard.
 
+    Args:
+        request: FastAPI request object required by the Jinja template renderer.
+
+    Returns:
+        TemplateResponse: HTML summary page containing rating, risk, date, logo, and sparkline context.
+
+    Raises:
+        HTTPException: Raised with status 404 when summary data is missing or 500 for connector failures.
+    """
     try:
         connector = BitSightConnector()
         summary = connector.get_company_summary()
@@ -459,6 +633,18 @@ def get_bitsight_summary(request: Request):
 ###
 @app.get("/crowdstrike/summary")
 def get_crowdstrike_summary(use_cache: bool = True):
+    """
+    Return a compact JSON CrowdStrike summary.
+
+    Args:
+        use_cache: When true, permits reuse of a fresh CrowdStrike snapshot cache.
+
+    Returns:
+        dict[str, object]: Snapshot metadata, limits, errors, and normalized CrowdStrike data.
+
+    Raises:
+        HTTPException: Raised with status 500 when snapshot collection fails.
+    """
     try:
         connector = CrowdStrikeConnector()
         snapshot = connector.get_snapshot(use_cache=use_cache)
@@ -476,6 +662,18 @@ def get_crowdstrike_summary(use_cache: bool = True):
 
 @app.get("/crowdstrike/raw")
 def get_crowdstrike_raw(use_cache: bool = True):
+    """
+    Return the full CrowdStrike snapshot payload.
+
+    Args:
+        use_cache: When true, permits reuse of a fresh CrowdStrike snapshot cache.
+
+    Returns:
+        dict[str, object]: Raw and normalized CrowdStrike snapshot data.
+
+    Raises:
+        HTTPException: Raised with status 500 when snapshot collection fails.
+    """
     try:
         connector = CrowdStrikeConnector()
         return connector.get_snapshot(use_cache=use_cache)
@@ -486,6 +684,19 @@ def get_crowdstrike_raw(use_cache: bool = True):
 
 @app.get("/crowdstrike/dashboard", response_class=HTMLResponse)
 def get_crowdstrike_dashboard(request: Request, use_cache: bool = True):
+    """
+    Render the CrowdStrike detail dashboard.
+
+    Args:
+        request: FastAPI request object required by the Jinja template renderer.
+        use_cache: When true, permits reuse of a fresh CrowdStrike snapshot cache.
+
+    Returns:
+        TemplateResponse: HTML page with host, event, incident, vulnerability, and grouping details.
+
+    Raises:
+        HTTPException: Raised with status 500 when snapshot collection or rendering context preparation fails.
+    """
     try:
         connector = CrowdStrikeConnector()
         snapshot = connector.get_snapshot(use_cache=use_cache)

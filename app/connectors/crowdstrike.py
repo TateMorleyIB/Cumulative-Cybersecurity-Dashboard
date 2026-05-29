@@ -118,8 +118,14 @@ class CrowdStrikeConnector:
             return {}
         return response.json()
 
-    def _query_ids(self, path: str, limit: int, sort: str | None = None, filter_query: str | None = None,) -> list[str]:
-        """ Queries a CrowdStrike endpoint that returns only IDs for the requested data, with optional sorting and filtering
+    def _query_ids(
+        self,
+        path: str,
+        limit: int,
+        sort: str | None = None,
+        filter_query: str | None = None,
+    ) -> list[str]:
+        """Queries a CrowdStrike endpoint that returns only IDs for the requested data, with optional sorting and filtering
 
         Args:
             path (str): The endpoint the API pulls from
@@ -141,7 +147,7 @@ class CrowdStrikeConnector:
         sort: str | None = None,
         filter_query: str | None = None,
     ) -> dict[str, Any]:
-        """ General query method for CrowdStrike endpoints that support filtering and sorting, used as a building block for more specific query methods
+        """General query method for CrowdStrike endpoints that support filtering and sorting, used as a building block for more specific query methods
 
         Args:
             path (str): The endpoint the API pulls from
@@ -202,7 +208,7 @@ class CrowdStrikeConnector:
         self, path: str, ids: list[str], id_param: str = "ids"
     ) -> list[dict[str, Any]]:
         """Returns the entities from a GET endpoint using a list of entity ids.
-        
+
         They are sent in batches of up to 100 per request. Results are gathered from
         the API's response's "resources" field and compiled into a single list.
 
@@ -252,9 +258,28 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _chunks(values: list[str], size: int) -> list[list[str]]:
+        """
+        Split a list into fixed-size chunks for batch API calls.
+
+        Args:
+            values: Source values to split.
+            size: Maximum number of values in each chunk.
+
+        Returns:
+            list[list[str]]: Ordered chunks preserving the source order.
+        """
         return [values[index : index + size] for index in range(0, len(values), size)]
 
     def get_hosts(self, limit: int = DEFAULT_LIMITS["hosts"]) -> list[dict[str, Any]]:
+        """
+        Fetch and hydrate CrowdStrike host details.
+
+        Args:
+            limit: Maximum number of host IDs to query before hydration.
+
+        Returns:
+            list[dict[str, Any]]: Host entity records returned by CrowdStrike.
+        """
         ids = self._query_ids(
             "/devices/queries/devices/v1", limit, sort="last_seen.desc"
         )
@@ -263,6 +288,18 @@ class CrowdStrikeConnector:
     def get_detections(
         self, limit: int = DEFAULT_LIMITS["detections"]
     ) -> list[dict[str, Any]]:
+        """
+        Fetch CrowdStrike detection details with endpoint-alert fallback behavior.
+
+        Args:
+            limit: Maximum number of detection or alert records to retrieve.
+
+        Returns:
+            list[dict[str, Any]]: Detection-like security event records.
+
+        Raises:
+            requests.HTTPError: Re-raised when both primary and fallback APIs fail.
+        """
         try:
             ids = self._query_ids_with_fallbacks(
                 "/detects/queries/detects/v1",
@@ -286,6 +323,15 @@ class CrowdStrikeConnector:
     def get_incidents(
         self, limit: int = DEFAULT_LIMITS["incidents"]
     ) -> list[dict[str, Any]]:
+        """
+        Fetch CrowdStrike incident details.
+
+        Args:
+            limit: Maximum number of incident IDs to query before hydration.
+
+        Returns:
+            list[dict[str, Any]]: Incident entity records returned by CrowdStrike.
+        """
         try:
             ids = self._query_ids_with_fallbacks(
                 "/incidents/queries/incidents/v1",
@@ -307,6 +353,15 @@ class CrowdStrikeConnector:
         )
 
     def get_alerts(self, limit: int = DEFAULT_LIMITS["alerts"]) -> list[dict[str, Any]]:
+        """
+        Fetch unified CrowdStrike alert records.
+
+        Args:
+            limit: Maximum number of alert records to retrieve.
+
+        Returns:
+            list[dict[str, Any]]: Unified alert records ordered by most recent activity.
+        """
         return self._get_alerts_by_filter(limit=limit)
 
     def _get_alerts_by_filter(
@@ -315,6 +370,20 @@ class CrowdStrikeConnector:
         filter_query: str | None = None,
         fallback_filter: str | None = None,
     ) -> list[dict[str, Any]]:
+        """
+        Fetch unified alerts with an optional fallback filter.
+
+        Args:
+            limit: Maximum number of alert records to retrieve.
+            filter_query: Primary Falcon Query Language filter to apply.
+            fallback_filter: Secondary filter used if the primary query fails.
+
+        Returns:
+            list[dict[str, Any]]: Alert records returned by the first successful filter.
+
+        Raises:
+            requests.HTTPError: Re-raised when the primary query fails and no fallback succeeds.
+        """
         filters = [filter_query]
         if fallback_filter and fallback_filter not in filters:
             filters.append(fallback_filter)
@@ -348,6 +417,15 @@ class CrowdStrikeConnector:
         # Identity alert records are exposed through Unified Alerts in current
         # Falcon tenants. The old identity-protection alerts route can return 404
         # even when the client has Identity Protection Alerts read access.
+        """
+        Fetch identity-focused CrowdStrike alerts.
+
+        Args:
+            limit: Maximum number of identity alert records to retrieve.
+
+        Returns:
+            list[dict[str, Any]]: Alert records filtered to identity-domain detections when supported.
+        """
         return self._get_alerts_by_filter(
             limit=limit,
             filter_query="data_domains:'Identity'",
@@ -360,6 +438,15 @@ class CrowdStrikeConnector:
         # Spotlight rejects unfiltered vulnerability searches in some tenants. Use
         # the combined endpoint first so the dashboard gets meaningful vulnerability
         # details in one call, then fall back to ID query + entity hydration.
+        """
+        Fetch CrowdStrike Spotlight vulnerability records.
+
+        Args:
+            limit: Maximum number of vulnerabilities to retrieve.
+
+        Returns:
+            list[dict[str, Any]]: Vulnerability records from combined or hydrated Spotlight endpoints.
+        """
         safe_limit = min(limit, 400)
         filters = self._vulnerability_filters()
         last_error: requests.HTTPError | None = None
@@ -399,6 +486,16 @@ class CrowdStrikeConnector:
     def _query_combined_vulnerabilities(
         self, limit: int, filter_query: str
     ) -> list[dict[str, Any]]:
+        """
+        Query the combined Spotlight vulnerability endpoint.
+
+        Args:
+            limit: Maximum number of vulnerability records to request.
+            filter_query: Spotlight vulnerability filter expression.
+
+        Returns:
+            list[dict[str, Any]]: Combined vulnerability resources.
+        """
         data = self._query(
             "/spotlight/combined/vulnerabilities/v1",
             limit,
@@ -408,6 +505,12 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _vulnerability_filters() -> list[str]:
+        """
+        Build ordered Spotlight vulnerability filters to try.
+
+        Returns:
+            list[str]: Configured filter followed by safe fallback filters without duplicates.
+        """
         filters = []
         if CROWDSTRIKE_VULNERABILITY_FILTER:
             filters.append(CROWDSTRIKE_VULNERABILITY_FILTER)
@@ -419,6 +522,15 @@ class CrowdStrikeConnector:
     def get_snapshot(
         self, use_cache: bool = True, limits: dict[str, int] | None = None
     ) -> dict[str, Any]:
+        """
+        Collect or read a complete CrowdStrike dashboard snapshot.
+
+        Args:
+            use_cache: When true, use a fresh local cache if available.
+
+        Returns:
+            dict[str, Any]: Snapshot metadata, raw collections, normalized data, collection errors, and limits.
+        """
         if use_cache:
             cached = self._read_cache()
             if cached:
@@ -463,6 +575,12 @@ class CrowdStrikeConnector:
         return snapshot
 
     def _read_cache(self) -> dict[str, Any] | None:
+        """
+        Read a fresh CrowdStrike snapshot from disk.
+
+        Returns:
+            dict[str, Any] | None: Cached snapshot when it exists and is still fresh; otherwise ``None``.
+        """
         if not CACHE_FILE.exists():
             return None
         modified_time = datetime.fromtimestamp(
@@ -474,12 +592,30 @@ class CrowdStrikeConnector:
             return json.load(file)
 
     def _write_cache(self, snapshot: dict[str, Any]) -> None:
+        """
+        Persist a CrowdStrike snapshot to disk.
+
+        Args:
+            snapshot: Snapshot payload to serialize as formatted JSON.
+
+        Returns:
+            None: This method performs filesystem side effects only.
+        """
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CACHE_FILE, "w", encoding="utf-8") as file:
             json.dump(snapshot, file, indent=2, default=str)
 
     @staticmethod
     def _response_detail(response: requests.Response | None) -> str:
+        """
+        Extract concise diagnostic details from an HTTP response.
+
+        Args:
+            response: Optional requests response associated with an exception.
+
+        Returns:
+            str: JSON error payload, response text, or a fallback message.
+        """
         if response is None:
             return "No response returned"
         try:
@@ -492,6 +628,15 @@ class CrowdStrikeConnector:
             return response.text[:500]
 
     def normalize(self, raw: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+        """
+        Normalize raw CrowdStrike collections for dashboard rendering.
+
+        Args:
+            raw: Mapping of collection names to raw CrowdStrike records.
+
+        Returns:
+            dict[str, Any]: Summary counters, groupings, and normalized host, event, incident, and vulnerability records.
+        """
         hosts = [self._normalize_host(host) for host in raw.get("hosts", [])]
         detections = [
             self._normalize_detection(item) for item in raw.get("detections", [])
@@ -529,6 +674,15 @@ class CrowdStrikeConnector:
         }
 
     def _normalize_host(self, host: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one CrowdStrike host record.
+
+        Args:
+            host: Raw host entity from CrowdStrike.
+
+        Returns:
+            dict[str, Any]: Stable host fields including hostname, platform, status, and stale flag.
+        """
         return {
             "id": self._first(host, "device_id", "id", "aid"),
             "hostname": self._first(host, "hostname", "device_name", "computer_name")
@@ -550,6 +704,15 @@ class CrowdStrikeConnector:
         }
 
     def _normalize_detection(self, detection: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one CrowdStrike detection record.
+
+        Args:
+            detection: Raw detection entity from CrowdStrike.
+
+        Returns:
+            dict[str, Any]: Stable security event fields used by the dashboard.
+        """
         behaviors = detection.get("behaviors") or []
         primary_behavior = behaviors[0] if behaviors else {}
         severity = self._severity_from_any(
@@ -582,6 +745,16 @@ class CrowdStrikeConnector:
     def _normalize_alert(
         self, alert: dict[str, Any], event_type: str
     ) -> dict[str, Any]:
+        """
+        Normalize one CrowdStrike unified alert record.
+
+        Args:
+            alert: Raw alert entity from CrowdStrike.
+            source: Collection label used to distinguish alert families.
+
+        Returns:
+            dict[str, Any]: Stable alert fields mapped into the dashboard security event shape.
+        """
         return {
             "id": self._first(alert, "id", "composite_id", "alert_id"),
             "type": event_type,
@@ -620,6 +793,15 @@ class CrowdStrikeConnector:
         }
 
     def _normalize_incident(self, incident: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one CrowdStrike incident record.
+
+        Args:
+            incident: Raw incident entity from CrowdStrike.
+
+        Returns:
+            dict[str, Any]: Stable incident fields including severity, status, source, and timestamps.
+        """
         return {
             "id": self._first(incident, "incident_id", "id", "composite_id"),
             "type": "incident",
@@ -649,6 +831,15 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _incident_source(incident: dict[str, Any]) -> str | None:
+        """
+        Infer a display source for a CrowdStrike incident.
+
+        Args:
+            incident: Raw incident entity that may include multiple source fields.
+
+        Returns:
+            str | None: First available source value, or ``None`` when no source is present.
+        """
         hosts = incident.get("hosts")
         if isinstance(hosts, list):
             return ", ".join(str(host) for host in hosts[:3])
@@ -658,6 +849,15 @@ class CrowdStrikeConnector:
         return None
 
     def _normalize_vulnerability(self, vulnerability: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize one CrowdStrike Spotlight vulnerability record.
+
+        Args:
+            vulnerability: Raw vulnerability entity from CrowdStrike.
+
+        Returns:
+            dict[str, Any]: Stable vulnerability fields including CVE, severity, host, status, and exploit context.
+        """
         cve = vulnerability.get("cve") or {}
         app = vulnerability.get("apps") or vulnerability.get("app") or []
         app_names = (
@@ -713,6 +913,18 @@ class CrowdStrikeConnector:
         events: list[dict[str, Any]],
         vulnerabilities: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """
+        Build aggregate CrowdStrike dashboard counters.
+
+        Args:
+            hosts: Normalized host records.
+            events: Normalized security event records.
+            incidents: Normalized incident records.
+            vulnerabilities: Normalized vulnerability records.
+
+        Returns:
+            dict[str, Any]: Counts for hosts, events, severity bands, incidents, stale hosts, and vulnerabilities.
+        """
         severity_counts = Counter(
             self._display_value(event.get("severity"), "unknown") for event in events
         )
@@ -750,6 +962,18 @@ class CrowdStrikeConnector:
         events: list[dict[str, Any]],
         vulnerabilities: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """
+        Build grouping counters for CrowdStrike dashboard charts and lists.
+
+        Args:
+            hosts: Normalized host records.
+            events: Normalized security event records.
+            incidents: Normalized incident records.
+            vulnerabilities: Normalized vulnerability records.
+
+        Returns:
+            dict[str, list[dict[str, Any]]]: Top operating systems, event severities, tactics, techniques, statuses, and vulnerability severities.
+        """
         hosts_by_platform = defaultdict(list)
         for host in hosts:
             hosts_by_platform[
@@ -779,6 +1003,15 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _severity_from_any(value: Any) -> str:
+        """
+        Normalize heterogeneous severity values into dashboard severity labels.
+
+        Args:
+            value: Numeric or string severity value from CrowdStrike.
+
+        Returns:
+            str: Canonical severity label such as ``Critical``, ``High``, ``Medium``, ``Low``, ``Informational``, or ``Unknown``.
+        """
         if value is None:
             return "unknown"
         if isinstance(value, (dict, list)):
@@ -811,6 +1044,16 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _is_stale(value: str | None, days: int = 14) -> bool:
+        """
+        Determine whether a timestamp is older than the allowed freshness window.
+
+        Args:
+            value: Timestamp string to evaluate.
+            days: Number of days before a record is considered stale.
+
+        Returns:
+            bool: True when the timestamp is missing, unparsable, or older than the threshold.
+        """
         if not value:
             return True
         timestamp = CrowdStrikeConnector._parse_timestamp(value)
@@ -820,6 +1063,15 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _parse_timestamp(value: str) -> datetime | None:
+        """
+        Parse a CrowdStrike timestamp into a timezone-aware datetime.
+
+        Args:
+            value: Timestamp string that may end with ``Z`` or include an offset.
+
+        Returns:
+            datetime | None: Parsed datetime, or ``None`` when parsing fails.
+        """
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except (AttributeError, TypeError, ValueError):
@@ -827,6 +1079,16 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _display_value(value: Any, fallback: str | None = None) -> str:
+        """
+        Select the first useful display value from a raw field.
+
+        Args:
+            value: Raw value that may be a scalar, list, or missing value.
+            fallback: Optional value returned when the input is empty.
+
+        Returns:
+            str: Human-readable display value.
+        """
         if value in (None, "", []):
             return fallback or ""
         if isinstance(value, dict):
@@ -857,6 +1119,16 @@ class CrowdStrikeConnector:
 
     @staticmethod
     def _first(data: dict[str, Any], *keys: str) -> Any:
+        """
+        Return the first non-empty value for a list of candidate keys.
+
+        Args:
+            data: Dictionary to inspect.
+            *keys: Candidate keys in priority order.
+
+        Returns:
+            Any: First non-empty value, or ``None`` if every candidate is missing.
+        """
         for key in keys:
             current: Any = data
             for part in key.split("."):
