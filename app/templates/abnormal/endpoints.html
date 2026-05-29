@@ -21,6 +21,16 @@
             </div>
         </section>
 
+        <section class="endpoint-controls glass-card" aria-label="Endpoint filters">
+            <!-- TODO: Add forms for endpoints with path parameters (id, action_id, message_id, etc.) so these calls can be made directly from the browser. -->
+            <label class="toggle-switch">
+                <input id="hide-needs-id" type="checkbox" checked>
+                <span class="toggle-track" aria-hidden="true"></span>
+                <span>Hide endpoints that need IDs for now</span>
+            </label>
+            <p id="needs-id-summary" class="muted small-copy"></p>
+        </section>
+
         <section class="endpoint-browser">
             {% for group in endpoint_groups %}
                 <article class="dashboard-card glass-card endpoint-group">
@@ -32,14 +42,14 @@
                     </div>
                     <div class="endpoint-list">
                         {% for endpoint in group.endpoints %}
-                            <div class="endpoint-row">
+                            <div class="endpoint-row" data-needs-id="{{ 'true' if endpoint.requires_params else 'false' }}">
                                 <div class="endpoint-main">
                                     <span class="method-badge method-{{ endpoint.method|lower }}">{{ endpoint.method }}</span>
                                     <div>
                                         <h3>{{ endpoint.label }}</h3>
                                         <code>{{ endpoint.path }}</code>
                                         {% if endpoint.requires_params %}
-                                            <p class="muted small-copy">Requires path values. Example: append query params such as <code>?id=...</code> to this dashboard proxy URL.</p>
+                                            <p class="muted small-copy">Requires path value{% if endpoint.param_names|length != 1 %}s{% endif %}: <code>{{ endpoint.param_names|join(', ') }}</code>.</p>
                                         {% endif %}
                                     </div>
                                 </div>
@@ -57,5 +67,23 @@
             {% endfor %}
         </section>
     </main>
+    <script>
+        const hideNeedsIdToggle = document.getElementById('hide-needs-id');
+        const needsIdRows = Array.from(document.querySelectorAll('[data-needs-id="true"]'));
+        const needsIdSummary = document.getElementById('needs-id-summary');
+
+        function updateNeedsIdVisibility() {
+            const shouldHide = hideNeedsIdToggle.checked;
+            needsIdRows.forEach((row) => {
+                row.hidden = shouldHide;
+            });
+            needsIdSummary.textContent = shouldHide
+                ? `${needsIdRows.length} ID-dependent endpoint(s) hidden until parameter forms are added.`
+                : `${needsIdRows.length} ID-dependent endpoint(s) shown for reference only.`;
+        }
+
+        hideNeedsIdToggle.addEventListener('change', updateNeedsIdVisibility);
+        updateNeedsIdVisibility();
+    </script>
 </body>
 </html>

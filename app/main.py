@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -159,6 +160,59 @@ def build_abnormal_overview(use_cache: bool = True):
         }
 
 
+def _path_param_names(path: str) -> list[str]:
+    return [segment.split("}", 1)[0] for segment in path.split("{")[1:]]
+
+
+def summarize_endpoint_result(payload):
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(value, list):
+                return {
+                    "title": key.replace("_", " ").title(),
+                    "count": len(value),
+                    "records": value[:25],
+                    "columns": _record_columns(value),
+                }
+        return {
+            "title": "Response object",
+            "count": len(payload),
+            "records": [payload],
+            "columns": _record_columns([payload]),
+        }
+    if isinstance(payload, list):
+        return {
+            "title": "Response list",
+            "count": len(payload),
+            "records": payload[:25],
+            "columns": _record_columns(payload),
+        }
+    return {"title": "Response", "count": 1 if payload else 0, "records": [], "columns": []}
+
+
+def _record_columns(records) -> list[str]:
+    columns: list[str] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        for key in record:
+            if key not in columns:
+                columns.append(key)
+            if len(columns) >= 6:
+                return columns
+    return columns
+
+
+def _display_value(value) -> str:
+    if isinstance(value, dict):
+        return ", ".join(f"{key}: {val}" for key, val in list(value.items())[:3])
+    if isinstance(value, list):
+        return f"{len(value)} item(s)"
+    if value is None:
+        return "—"
+    return str(value)
+
+
 def build_abnormal_endpoint_catalog():
     groups = {
         "Threats & messages": [],
@@ -171,12 +225,14 @@ def build_abnormal_endpoint_catalog():
         "Other": [],
     }
     for key, (method, path) in ACCESSIBLE_ENDPOINTS.items():
+        param_names = _path_param_names(path)
         endpoint = {
             "key": key,
             "label": key.replace("_", " ").title(),
             "method": method,
             "path": path,
-            "requires_params": "{" in path,
+            "requires_params": bool(param_names),
+            "param_names": param_names,
             "url": f"/abnormal/{key}",
         }
         if any(token in key for token in ("threat", "message", "ioc", "abusecampaign")):
@@ -267,11 +323,30 @@ def get_abnormal_endpoints_json():
 
 
 @app.get("/abnormal/{endpoint_key}")
-def get_abnormal_endpoint(endpoint_key: str, request: Request):
+def get_abnormal_endpoint(endpoint_key: str, request: Request, format: str | None = None):
     try:
         connector = AbnormalConnector()
-        return connector.get_endpoint(
-            endpoint_key, params=dict(request.query_params) or None
+        query_params = dict(request.query_params)
+        query_params.pop("format", None)
+        result = connector.get_endpoint(endpoint_key, params=query_params or None)
+        if format == "json" or "text/html" not in request.headers.get("accept", ""):
+            return result
+
+        method, path = ACCESSIBLE_ENDPOINTS[endpoint_key]
+        return templates.TemplateResponse(
+            request=request,
+            name="abnormal/endpoint_result.html",
+            context={
+                "endpoint": {
+                    "key": endpoint_key,
+                    "label": endpoint_key.replace("_", " ").title(),
+                    "method": method,
+                    "path": path,
+                },
+                "summary": summarize_endpoint_result(result),
+                "result_json": json.dumps(result, indent=2, default=str),
+                "display_value": _display_value,
+            },
         )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
