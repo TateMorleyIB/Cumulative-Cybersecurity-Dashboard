@@ -15,10 +15,11 @@
         <div class="header">
           <div class="company">
             <img class="ironbow-logo" src="/bitsight/logo" alt="Iron Bow logo" />
-            <div>
+            <div class="bitsight-title-stack">
               <p class="kicker">BitSight ratings</p>
               <h1>{{ company_name }}</h1>
               <p class="subtitle">Security Rating Dashboard</p>
+              <img class="bitsight-sparkline" src="/bitsight/sparkline" alt="BitSight rating trend" width="60" height="20" />
             </div>
           </div>
           <a class="nav-link" href="/dashboard">← Master dashboard</a>
@@ -27,7 +28,10 @@
         <div class="stats">
           <div class="tile">
             <div class="label">BitSight Score</div>
-            <div class="score">{{ score }}</div>
+            <div class="bitsight-score-row">
+              <div class="score">{{ score }}</div>
+              <img class="bitsight-sparkline" src="/bitsight/sparkline" alt="BitSight rating trend" width="60" height="20" />
+            </div>
           </div>
 
           <div class="tile">

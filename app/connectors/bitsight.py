@@ -113,10 +113,11 @@ class BitSightConnector:
         return response.content, content_type
 
     def get_company_sparkline_image(self):
-        """Fetches the companie's sparkline graphic and caches it
-        
-        FIXME: Implement front-end integration (ensure image size is only 60x20px)
-        NOT BEING USED! SPARKLIKNE IMG NOT DISPLAYED DUE TO FORMATTING ISSUES.
+        """Fetches the company's rating trend sparkline and caches it.
+
+        The UI renders this image through the /bitsight/sparkline route with
+        explicit 60x20 dimensions so the small API image stays aligned in
+        desktop dashboard tiles.
 
         Returns:
             File: The sparkline image file
