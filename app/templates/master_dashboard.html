@@ -144,7 +144,7 @@
                                 {% for item in abnormal.recent_abuse_reports[:4] %}
                                     <li>
                                         <span>{{ item.subject }}</span>
-                                        <strong>{{ item.reason }}</strong>
+                                        <small>Review status: {{ item.reason }}{% if item.reported_at %} · {{ item.reported_at[:10] }}{% endif %}{% if item.reporter %} · {{ item.reporter }}{% endif %}</small>
                                     </li>
                                 {% endfor %}
                             </ul>

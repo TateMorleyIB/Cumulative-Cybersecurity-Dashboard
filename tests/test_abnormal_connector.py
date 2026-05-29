@@ -251,3 +251,39 @@ def test_abnormal_normalize_extracts_abnormal_named_payloads(monkeypatch):
         {"label": "Executive User", "count": 11}
     ]
     assert normalized["recent_abuse_reports"][0]["subject"] == "Suspicious report"
+    assert normalized["recent_abuse_reports"][0]["reason"] == "Needs manual review"
+    assert normalized["recent_abuse_reports"][0]["raw_reason"] == "COULD_NOT_EXTRACT"
+
+
+def test_abnormal_normalize_uses_dashboard_summary_fallback_payloads(monkeypatch):
+    abnormal = connector(monkeypatch)
+
+    normalized = abnormal.normalize(
+        {
+            "dashboard_summary": [
+                {
+                    "recipient_employees": [
+                        {"display_name": "Rene LaVigne", "attack_count": 11},
+                        {"display_name": "Kathy Langreich", "attack_count": 8},
+                    ]
+                },
+                {
+                    "attack_frequency": [
+                        {
+                            "timestamp": "2026-05-29",
+                            "attack_type": "Phishing: Credential",
+                            "attack_count": 65,
+                        }
+                    ]
+                },
+            ],
+        }
+    )
+
+    assert normalized["recipient_employees"] == [
+        {"label": "Rene LaVigne", "count": 11},
+        {"label": "Kathy Langreich", "count": 8},
+    ]
+    assert normalized["attack_frequency"] == [
+        {"label": "Phishing: Credential", "count": 65}
+    ]

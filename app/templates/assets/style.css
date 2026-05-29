@@ -566,7 +566,7 @@ tr:last-child td {
 }
 
 .overview-grid {
-    grid-template-columns: 1.35fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .glass-card {
@@ -575,6 +575,7 @@ tr:last-child td {
 }
 
 .featured-card {
+    grid-column: 1 / -1;
     min-height: 100%;
 }
 
@@ -644,6 +645,10 @@ tr:last-child td {
 
     .featured-card {
         grid-column: 1 / -1;
+    }
+
+    .expanded-insights {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -778,7 +783,7 @@ tr:last-child td {
 }
 
 .expanded-insights {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .compact-section {
@@ -797,9 +802,9 @@ tr:last-child td {
     flex-direction: column;
 }
 
-.abuse-list strong {
-    color: var(--warn-tx);
+.abuse-list small {
+    color: var(--muted);
     font-size: 0.78rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-weight: 750;
+    line-height: 1.35;
 }

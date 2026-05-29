@@ -21,6 +21,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_FILE = PROJECT_ROOT / "data" / "raw" / "abnormal" / "abnormal_snapshot.json"
 CACHE_TTL = timedelta(minutes=15)
 DEFAULT_BASE_URL = "https://api.abnormalplatform.com"
+ABUSE_REASON_LABELS = {
+    "COULD_NOT_EXTRACT": "Needs manual review",
+    "INVALID_SUBMISSION": "Invalid submission",
+    "INVALID_MAILBOX": "Invalid mailbox",
+    "PHISHING_SIMULATION": "Phishing simulation",
+}
 DEFAULT_LIMITS = {
     "threats": 25,
     "cases": 25,
@@ -45,6 +51,7 @@ HIGH_LEVEL_ENDPOINTS = {
     ),
     "most_impersonated_vendor": ("GET", "/v1/aggregations/most_impersonated_vendor"),
     "abuse_not_analyzed": ("GET", "/v1/abuse_mailbox/not_analyzed"),
+    "recipient_employees": ("GET", "/v1/aggregations/recipient_employees"),
     "threats": ("GET", "/v1/threats"),
     "cases": ("GET", "/v1/cases"),
     "iocs": ("GET", "/v1/iocs"),
@@ -360,26 +367,32 @@ class AbnormalConnector:
 
         return {
             "summary": summary,
-            "trending_attacks": self._top_buckets(raw.get("trending_attacks", {})),
-            "attack_vectors": self._top_buckets(raw.get("attack_vector_breakdown", {})),
+            "trending_attacks": self._top_buckets(
+                self._payload_for_key(raw, "trending_attacks")
+            ),
+            "attack_vectors": self._top_buckets(
+                self._payload_for_key(raw, "attack_vector_breakdown")
+            ),
             "attack_strategies": self._top_buckets(
-                raw.get("attack_strategy_breakdown", {})
+                self._payload_for_key(raw, "attack_strategy_breakdown")
             ),
             "sender_impersonation": self._top_buckets(
-                raw.get("sender_impersonation_breakdown", {})
+                self._payload_for_key(raw, "sender_impersonation_breakdown")
             ),
-            "attacker_origins": self._top_buckets(raw.get("attacker_origin", {})),
+            "attacker_origins": self._top_buckets(
+                self._payload_for_key(raw, "attacker_origin")
+            ),
             "impersonated_employees": self._top_buckets(
-                raw.get("most_impersonated_employee", {})
+                self._payload_for_key(raw, "most_impersonated_employee")
             ),
             "impersonated_vendors": self._top_buckets(
-                raw.get("most_impersonated_vendor", {})
+                self._payload_for_key(raw, "most_impersonated_vendor")
             ),
             "recipient_employees": self._top_buckets(
-                raw.get("recipient_employees", {})
+                self._payload_for_key(raw, "recipient_employees")
             ),
             "attack_frequency": self._attack_frequency(
-                raw.get("dashboard_summary", {})
+                self._payload_for_key(raw, "attack_frequency")
             ),
             "recent_abuse_reports": [
                 self._normalize_abuse_report(item) for item in abuse_items[:6]
@@ -423,13 +436,42 @@ class AbnormalConnector:
         reporter = (
             item.get("reporter") if isinstance(item.get("reporter"), dict) else {}
         )
+        raw_reason = self._first(item, "not_analyzed_reason", "reason") or "Unknown"
         return {
             "id": self._first(item, "abx_message_id", "id"),
             "subject": self._first(item, "subject") or "Reported message",
-            "reason": self._first(item, "not_analyzed_reason", "reason") or "Unknown",
+            "reason": self._format_abuse_reason(raw_reason),
+            "raw_reason": raw_reason,
             "reported_at": self._first(item, "reported_datetime", "reported_at"),
             "reporter": self._first(reporter, "email", "name") if reporter else None,
         }
+
+    def _payload_for_key(self, raw: dict[str, Any], key: str) -> Any:
+        payload = raw.get(key)
+        if payload not in (None, {}, []):
+            return payload
+        return self._find_named_payload(raw.get("dashboard_summary", {}), key)
+
+    def _find_named_payload(self, payload: Any, key: str) -> Any:
+        if isinstance(payload, dict):
+            if key in payload:
+                return {key: payload[key]}
+            for value in payload.values():
+                found = self._find_named_payload(value, key)
+                if found not in (None, {}, []):
+                    return found
+        elif isinstance(payload, list):
+            for item in payload:
+                found = self._find_named_payload(item, key)
+                if found not in (None, {}, []):
+                    return found
+        return {}
+
+    def _format_abuse_reason(self, reason: Any) -> str:
+        reason_text = str(reason or "Unknown")
+        return ABUSE_REASON_LABELS.get(
+            reason_text, reason_text.replace("_", " ").strip().title() or "Unknown"
+        )
 
     def _top_buckets(
         self, payload: Any, limit: int = 5, record_key: str | None = None
