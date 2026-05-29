@@ -32,12 +32,12 @@
                 <small>{{ crowdstrike.critical_or_high_events }} critical / high</small>
             </div>
             <div class="glass-metric accent-metric">
-                <span class="label">Email Threats</span>
+                <span class="label">Observed Threats</span>
                 <strong>{{ abnormal.total_threats }}</strong>
                 <small>{{ abnormal.stopped_attacks }} attacks stopped</small>
             </div>
             <div class="glass-metric">
-                <span class="label">Analyst Queue</span>
+                <span class="label">Abuse Queue</span>
                 <strong>{{ abnormal.not_analyzed }}</strong>
                 <small>{{ abnormal.open_cases }} open Abnormal cases</small>
             </div>
@@ -61,11 +61,11 @@
                 {% else %}
                     <div class="metric-grid compact-metrics">
                         <div class="metric-tile">
-                            <div class="label">Threats</div>
+                            <div class="label">Observed Threats</div>
                             <div class="metric-large">{{ abnormal.total_threats }}</div>
                         </div>
                         <div class="metric-tile">
-                            <div class="label">Stopped</div>
+                            <div class="label">Stopped Attacks</div>
                             <div class="metric-large">{{ abnormal.stopped_attacks }}</div>
                         </div>
                         <div class="metric-tile">
@@ -78,6 +78,9 @@
                         </div>
                     </div>
                     <p class="tool-copy status">{{ abnormal.status }}</p>
+                    {% if abnormal.collection_warning_count %}
+                        <p class="status-note">Some Abnormal widgets are unavailable because {{ abnormal.collection_warning_count }} endpoint collection warning(s) occurred. Available metrics are still shown.</p>
+                    {% endif %}
 
                     <div class="insight-columns">
                         <div>
@@ -88,8 +91,10 @@
                                         <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
                                     {% endfor %}
                                 </ul>
+                            {% elif abnormal.has_trending_error %}
+                                <p class="muted small-copy">Trending attack data is unavailable due to a collection warning.</p>
                             {% else %}
-                                <p class="muted small-copy">No trending attack buckets returned.</p>
+                                <p class="muted small-copy">No trending attack buckets returned by Abnormal.</p>
                             {% endif %}
                         </div>
                         <div>
@@ -100,14 +105,16 @@
                                         <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
                                     {% endfor %}
                                 </ul>
+                            {% elif abnormal.has_vector_error %}
+                                <p class="muted small-copy">Attack vector data is unavailable due to a collection warning.</p>
                             {% else %}
-                                <p class="muted small-copy">No vector breakdown returned.</p>
+                                <p class="muted small-copy">No vector breakdown returned by Abnormal.</p>
                             {% endif %}
                         </div>
                     </div>
                 {% endif %}
 
-                <a class="tool-link" href="/abnormal/endpoints">View Abnormal endpoints →</a>
+                <a class="tool-link" href="/abnormal/endpoints">Browse Abnormal API endpoints →</a>
             </article>
 
             <article class="tool-card glass-card">

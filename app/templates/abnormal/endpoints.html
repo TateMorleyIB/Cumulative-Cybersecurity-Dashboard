@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abnormal API Endpoints</title>
+    <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
+</head>
+<body class="dashboard-page overview-page">
+    <main class="page-shell overview-shell">
+        <section class="glass-hero compact-hero">
+            <div>
+                <p class="page-kicker">Abnormal Security</p>
+                <h1>API endpoint browser</h1>
+                <p class="subtitle">Human-readable shortcuts for the Abnormal endpoints available to this dashboard. Use query parameters for IDs required by path templates.</p>
+            </div>
+            <div class="hero-actions">
+                <a class="nav-link" href="/dashboard">Back to overview</a>
+                <a class="nav-link" href="/abnormal/endpoints.json">Raw JSON</a>
+                <a class="nav-link" href="/abnormal/snapshot">Current snapshot</a>
+            </div>
+        </section>
+
+        <section class="endpoint-browser">
+            {% for group in endpoint_groups %}
+                <article class="dashboard-card glass-card endpoint-group">
+                    <div class="endpoint-group-header">
+                        <div>
+                            <p class="page-kicker">{{ group.endpoints|length }} endpoint{% if group.endpoints|length != 1 %}s{% endif %}</p>
+                            <h2>{{ group.name }}</h2>
+                        </div>
+                    </div>
+                    <div class="endpoint-list">
+                        {% for endpoint in group.endpoints %}
+                            <div class="endpoint-row">
+                                <div class="endpoint-main">
+                                    <span class="method-badge method-{{ endpoint.method|lower }}">{{ endpoint.method }}</span>
+                                    <div>
+                                        <h3>{{ endpoint.label }}</h3>
+                                        <code>{{ endpoint.path }}</code>
+                                        {% if endpoint.requires_params %}
+                                            <p class="muted small-copy">Requires path values. Example: append query params such as <code>?id=...</code> to this dashboard proxy URL.</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if endpoint.method == "GET" and not endpoint.requires_params %}
+                                    <a class="endpoint-action" href="{{ endpoint.url }}">Open</a>
+                                {% elif endpoint.requires_params %}
+                                    <span class="endpoint-action disabled-action">Needs ID</span>
+                                {% else %}
+                                    <span class="endpoint-action disabled-action">POST only</span>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </article>
+            {% endfor %}
+        </section>
+    </main>
+</body>
+</html>

@@ -285,6 +285,8 @@ class AbnormalConnector:
             snapshot = json.loads(CACHE_FILE.read_text())
             if self._is_unusable_error_snapshot(snapshot):
                 return None
+            snapshot["normalized"] = self.normalize(snapshot.get("raw", {}))
+            snapshot.setdefault("warnings", [])
             return snapshot
         except (OSError, json.JSONDecodeError):
             return None
@@ -306,13 +308,21 @@ class AbnormalConnector:
         abuse_items = self._extract_records(raw.get("abuse_not_analyzed", {}))
 
         total_threats = self._first_number(
-            dashboard_summary,
+            raw.get("threats", {}),
             "total_threats",
             "totalthreats",
             "threats_total",
             "threat_count",
             "total",
         )
+        if total_threats is None:
+            total_threats = self._first_number(
+                dashboard_summary,
+                "total_threats",
+                "totalthreats",
+                "threats_total",
+                "threat_count",
+            )
         stopped_attacks = self._first_number(
             raw.get("attack_stopped", {}),
             "attack_stopped",

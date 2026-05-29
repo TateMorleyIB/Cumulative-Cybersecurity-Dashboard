@@ -122,6 +122,9 @@ def build_abnormal_overview(use_cache: bool = True):
             "recent_threats": normalized.get("recent_threats", []),
             "errors": errors,
             "warnings": warnings,
+            "collection_warning_count": len(errors),
+            "has_trending_error": "trending_attacks" in errors,
+            "has_vector_error": "attack_vector_breakdown" in errors,
         }
     except Exception as error:
         return {
@@ -137,6 +140,60 @@ def build_abnormal_overview(use_cache: bool = True):
             "recent_threats": [],
             "error": str(error),
         }
+
+
+def build_abnormal_endpoint_catalog():
+    groups = {
+        "Threats & messages": [],
+        "Aggregations & dashboard": [],
+        "Cases & investigations": [],
+        "Employees & identity": [],
+        "Vendors": [],
+        "Search & audit": [],
+        "SPM & settings": [],
+        "Other": [],
+    }
+    for key, (method, path) in ACCESSIBLE_ENDPOINTS.items():
+        endpoint = {
+            "key": key,
+            "label": key.replace("_", " ").title(),
+            "method": method,
+            "path": path,
+            "requires_params": "{" in path,
+            "url": f"/abnormal/{key}",
+        }
+        if any(token in key for token in ("threat", "message", "ioc", "abusecampaign")):
+            group = "Threats & messages"
+        elif "aggregation" in path or key in {
+            "dashboard_summary",
+            "attack_stopped",
+            "trending_attacks",
+            "attack_frequency",
+            "attacker_origin",
+        }:
+            group = "Aggregations & dashboard"
+        elif "case" in key:
+            group = "Cases & investigations"
+        elif any(token in key for token in ("employee", "recipient", "user", "role")):
+            group = "Employees & identity"
+        elif "vendor" in key:
+            group = "Vendors"
+        elif any(token in key for token in ("search", "audit")):
+            group = "Search & audit"
+        elif any(
+            token in key
+            for token in ("spm", "posture", "security", "soar", "detection360")
+        ):
+            group = "SPM & settings"
+        else:
+            group = "Other"
+        groups[group].append(endpoint)
+
+    return [
+        {"name": name, "endpoints": sorted(endpoints, key=lambda item: item["key"])}
+        for name, endpoints in groups.items()
+        if endpoints
+    ]
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -175,8 +232,17 @@ def get_abnormal_snapshot(use_cache: bool = True):
         raise HTTPException(status_code=500, detail=str(error))
 
 
-@app.get("/abnormal/endpoints")
-def get_abnormal_endpoints():
+@app.get("/abnormal/endpoints", response_class=HTMLResponse)
+def get_abnormal_endpoints(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="abnormal/endpoints.html",
+        context={"endpoint_groups": build_abnormal_endpoint_catalog()},
+    )
+
+
+@app.get("/abnormal/endpoints.json")
+def get_abnormal_endpoints_json():
     return {
         key: {"method": method, "path": path}
         for key, (method, path) in ACCESSIBLE_ENDPOINTS.items()

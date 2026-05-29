@@ -1,3 +1,4 @@
+import json
 from app.connectors.abnormal import AbnormalConnector
 import app.connectors.abnormal as abnormal_module
 
@@ -127,3 +128,48 @@ def test_abnormal_does_not_write_all_error_cache(tmp_path, monkeypatch):
     )
 
     assert not cache_file.exists()
+
+
+def test_abnormal_normalize_does_not_treat_generic_dashboard_total_as_threats(
+    monkeypatch,
+):
+    abnormal = connector(monkeypatch)
+
+    normalized = abnormal.normalize(
+        {
+            "dashboard_summary": {"total": 100},
+            "abuse_not_analyzed": {"total": 100},
+            "threats": {"resources": []},
+        }
+    )
+
+    assert normalized["summary"]["total_threats"] == 0
+    assert normalized["summary"]["not_analyzed"] == 100
+
+
+def test_abnormal_refreshes_cached_normalized_payload_with_current_rules(
+    tmp_path, monkeypatch
+):
+    cache_file = tmp_path / "abnormal_snapshot.json"
+    cache_file.write_text(
+        json.dumps(
+            {
+                "raw": {
+                    "dashboard_summary": {"total": 100},
+                    "abuse_not_analyzed": {"total": 100},
+                    "threats": {"resources": []},
+                },
+                "normalized": {"summary": {"total_threats": 100}},
+                "errors": {},
+            }
+        )
+    )
+    monkeypatch.setattr(abnormal_module, "CACHE_FILE", cache_file)
+
+    abnormal = AbnormalConnector.__new__(AbnormalConnector)
+    abnormal.cache_ttl = abnormal_module.CACHE_TTL
+
+    cached = abnormal._read_cache()
+
+    assert cached["normalized"]["summary"]["total_threats"] == 0
+    assert cached["normalized"]["summary"]["not_analyzed"] == 100
