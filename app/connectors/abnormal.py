@@ -5,8 +5,17 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import urllib3
+from requests.exceptions import SSLError
+from urllib3.exceptions import InsecureRequestWarning
 
-from app.config import ABNORMAL_API_KEY, ABNORMAL_BASE_URL
+from app.config import (
+    ABNORMAL_ALLOW_INSECURE_SSL_FALLBACK,
+    ABNORMAL_API_KEY,
+    ABNORMAL_BASE_URL,
+    ABNORMAL_CA_BUNDLE,
+    ABNORMAL_VERIFY_SSL,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_FILE = PROJECT_ROOT / "data" / "raw" / "abnormal" / "abnormal_snapshot.json"
@@ -135,6 +144,13 @@ class AbnormalConnector:
 
         self.base_url = (ABNORMAL_BASE_URL or DEFAULT_BASE_URL).rstrip("/")
         self.cache_ttl = cache_ttl
+        self.verify: bool | str = self._resolve_verify_setting()
+        self.allow_insecure_ssl_fallback = self._env_flag(
+            ABNORMAL_ALLOW_INSECURE_SSL_FALLBACK, default=True
+        )
+        self.ssl_warnings: list[str] = []
+        if self.verify is False:
+            urllib3.disable_warnings(InsecureRequestWarning)
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -144,9 +160,7 @@ class AbnormalConnector:
         )
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
-        response = self.session.request(
-            method, f"{self.base_url}{path}", timeout=30, **kwargs
-        )
+        response = self._send_request(method, path, **kwargs)
         response.raise_for_status()
         if not response.content:
             return {}
@@ -154,6 +168,45 @@ class AbnormalConnector:
         if "json" not in content_type:
             return {"content": response.text}
         return response.json()
+
+    def _send_request(self, method: str, path: str, **kwargs) -> requests.Response:
+        kwargs.setdefault("verify", self.verify)
+        try:
+            return self.session.request(
+                method, f"{self.base_url}{path}", timeout=30, **kwargs
+            )
+        except SSLError:
+            if not self._can_retry_without_ssl_verification(kwargs.get("verify")):
+                raise
+
+            self.verify = False
+            kwargs["verify"] = False
+            urllib3.disable_warnings(InsecureRequestWarning)
+            warning = (
+                "TLS certificate verification failed; retried Abnormal API requests "
+                "with certificate verification disabled. Configure ABNORMAL_CA_BUNDLE "
+                "with your corporate CA certificate or set "
+                "ABNORMAL_ALLOW_INSECURE_SSL_FALLBACK=false to fail closed."
+            )
+            if warning not in self.ssl_warnings:
+                self.ssl_warnings.append(warning)
+            return self.session.request(
+                method, f"{self.base_url}{path}", timeout=30, **kwargs
+            )
+
+    def _can_retry_without_ssl_verification(self, current_verify: bool | str) -> bool:
+        return bool(self.allow_insecure_ssl_fallback and current_verify is not False)
+
+    def _resolve_verify_setting(self) -> bool | str:
+        if ABNORMAL_CA_BUNDLE:
+            return ABNORMAL_CA_BUNDLE
+        return self._env_flag(ABNORMAL_VERIFY_SSL, default=True)
+
+    @staticmethod
+    def _env_flag(value: str | None, default: bool) -> bool:
+        if value is None or value == "":
+            return default
+        return value.strip().lower() not in {"0", "false", "no", "off"}
 
     def get_endpoint(
         self,
@@ -210,6 +263,7 @@ class AbnormalConnector:
             "raw": raw,
             "normalized": self.normalize(raw),
             "errors": errors,
+            "warnings": self.ssl_warnings,
         }
         self._write_cache(snapshot)
         return snapshot
@@ -228,11 +282,19 @@ class AbnormalConnector:
             )
             if datetime.now(timezone.utc) - modified_at > self.cache_ttl:
                 return None
-            return json.loads(CACHE_FILE.read_text())
+            snapshot = json.loads(CACHE_FILE.read_text())
+            if self._is_unusable_error_snapshot(snapshot):
+                return None
+            return snapshot
         except (OSError, json.JSONDecodeError):
             return None
 
+    def _is_unusable_error_snapshot(self, snapshot: dict[str, Any]) -> bool:
+        return not snapshot.get("raw") and bool(snapshot.get("errors"))
+
     def _write_cache(self, snapshot: dict[str, Any]) -> None:
+        if self._is_unusable_error_snapshot(snapshot):
+            return
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         CACHE_FILE.write_text(json.dumps(snapshot, indent=2, default=str))
 

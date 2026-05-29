@@ -102,9 +102,12 @@ def build_abnormal_overview(use_cache: bool = True):
         normalized = snapshot.get("normalized", {})
         summary = normalized.get("summary", {})
         errors = snapshot.get("errors", {})
+        warnings = snapshot.get("warnings", [])
         status = summary.get("status", "Available")
         if errors:
             status = f"{status}; {len(errors)} collection warning(s)"
+        elif warnings:
+            status = f"{status}; TLS warning: API requests used fallback certificate handling"
 
         return {
             "total_threats": summary.get("total_threats", 0),
@@ -118,6 +121,7 @@ def build_abnormal_overview(use_cache: bool = True):
             "attack_vectors": normalized.get("attack_vectors", []),
             "recent_threats": normalized.get("recent_threats", []),
             "errors": errors,
+            "warnings": warnings,
         }
     except Exception as error:
         return {
