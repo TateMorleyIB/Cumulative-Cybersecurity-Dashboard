@@ -49,6 +49,8 @@ def test_abnormal_endpoint_browser_has_hide_needs_id_switch():
     assert "hide-needs-id" in template
     assert "TODO: Add forms for endpoints with path parameters" in template
     assert 'data-needs-id="{{' in template
+    assert "needs-id-endpoint is-hidden" in template
+    assert "updateGroupVisibility" in template
 
 
 def test_abnormal_get_endpoint_prepares_html_result_for_browser(monkeypatch):

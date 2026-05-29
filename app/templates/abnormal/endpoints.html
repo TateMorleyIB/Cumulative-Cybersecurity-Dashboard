@@ -33,7 +33,7 @@
 
         <section class="endpoint-browser">
             {% for group in endpoint_groups %}
-                <article class="dashboard-card glass-card endpoint-group">
+                <article class="dashboard-card glass-card endpoint-group" data-endpoint-group>
                     <div class="endpoint-group-header">
                         <div>
                             <p class="page-kicker">{{ group.endpoints|length }} endpoint{% if group.endpoints|length != 1 %}s{% endif %}</p>
@@ -42,7 +42,7 @@
                     </div>
                     <div class="endpoint-list">
                         {% for endpoint in group.endpoints %}
-                            <div class="endpoint-row" data-needs-id="{{ 'true' if endpoint.requires_params else 'false' }}">
+                            <div class="endpoint-row{% if endpoint.requires_params %} needs-id-endpoint is-hidden{% endif %}" data-needs-id="{{ 'true' if endpoint.requires_params else 'false' }}"{% if endpoint.requires_params %} hidden{% endif %}>
                                 <div class="endpoint-main">
                                     <span class="method-badge method-{{ endpoint.method|lower }}">{{ endpoint.method }}</span>
                                     <div>
@@ -70,13 +70,25 @@
     <script>
         const hideNeedsIdToggle = document.getElementById('hide-needs-id');
         const needsIdRows = Array.from(document.querySelectorAll('[data-needs-id="true"]'));
+        const endpointGroups = Array.from(document.querySelectorAll('[data-endpoint-group]'));
         const needsIdSummary = document.getElementById('needs-id-summary');
+
+        function updateGroupVisibility() {
+            endpointGroups.forEach((group) => {
+                const visibleRows = group.querySelectorAll('.endpoint-row:not(.is-hidden)');
+                const shouldHideGroup = visibleRows.length === 0;
+                group.hidden = shouldHideGroup;
+                group.classList.toggle('is-hidden', shouldHideGroup);
+            });
+        }
 
         function updateNeedsIdVisibility() {
             const shouldHide = hideNeedsIdToggle.checked;
             needsIdRows.forEach((row) => {
                 row.hidden = shouldHide;
+                row.classList.toggle('is-hidden', shouldHide);
             });
+            updateGroupVisibility();
             needsIdSummary.textContent = shouldHide
                 ? `${needsIdRows.length} ID-dependent endpoint(s) hidden until parameter forms are added.`
                 : `${needsIdRows.length} ID-dependent endpoint(s) shown for reference only.`;

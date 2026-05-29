@@ -915,3 +915,10 @@ tr:last-child td {
         flex-direction: column;
     }
 }
+
+.endpoint-row[hidden],
+.endpoint-row.is-hidden,
+.endpoint-group[hidden],
+.endpoint-group.is-hidden {
+    display: none !important;
+}
