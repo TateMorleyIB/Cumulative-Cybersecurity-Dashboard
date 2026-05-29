@@ -6,18 +6,111 @@
     <title>Cumulative Cybersecurity Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('assets', path='style.css') }}">
 </head>
-<body class="dashboard-page">
-    <main class="page-shell">
-        <section class="page-header">
+<body class="dashboard-page overview-page">
+    <main class="page-shell overview-shell">
+        <section class="glass-hero">
             <div>
                 <p class="page-kicker">Unified security observation deck</p>
-                <h1>Cumulative Cybersecurity Dashboard</h1>
-                <p class="subtitle">High-level security posture from BitSight ratings and CrowdStrike Falcon telemetry in one clean view.</p>
+                <h1>Glass-pane cybersecurity overview</h1>
+                <p class="subtitle">Executive signal across vendor risk, endpoint telemetry, and Abnormal email security in a high-level operational pane.</p>
+            </div>
+            <div class="hero-actions">
+                <a class="nav-link" href="/abnormal/snapshot">Abnormal API snapshot</a>
+                <a class="nav-link" href="/crowdstrike/dashboard">CrowdStrike details</a>
             </div>
         </section>
 
-        <section class="tool-grid">
-            <article class="tool-card">
+        <section class="overview-metrics" aria-label="High level cybersecurity metrics">
+            <div class="glass-metric">
+                <span class="label">BitSight Rating</span>
+                <strong>{{ bitsight.score }}</strong>
+                <small>{{ bitsight.risk_level }} vendor risk</small>
+            </div>
+            <div class="glass-metric">
+                <span class="label">Endpoint Events</span>
+                <strong>{{ crowdstrike.total_security_events }}</strong>
+                <small>{{ crowdstrike.critical_or_high_events }} critical / high</small>
+            </div>
+            <div class="glass-metric accent-metric">
+                <span class="label">Email Threats</span>
+                <strong>{{ abnormal.total_threats }}</strong>
+                <small>{{ abnormal.stopped_attacks }} attacks stopped</small>
+            </div>
+            <div class="glass-metric">
+                <span class="label">Analyst Queue</span>
+                <strong>{{ abnormal.not_analyzed }}</strong>
+                <small>{{ abnormal.open_cases }} open Abnormal cases</small>
+            </div>
+        </section>
+
+        <section class="tool-grid overview-grid">
+            <article class="tool-card glass-card featured-card">
+                <div class="tool-header">
+                    <div class="tool-title">
+                        <div class="product-mark abnormal">AB</div>
+                        <div>
+                            <h2>Abnormal Security</h2>
+                            <p class="muted">Email threat protection and abuse mailbox triage</p>
+                        </div>
+                    </div>
+                    <span class="badge risk-{{ abnormal.risk_level|lower }}">{{ abnormal.risk_level }}</span>
+                </div>
+
+                {% if abnormal.error %}
+                    <p class="status">{{ abnormal.error }}</p>
+                {% else %}
+                    <div class="metric-grid compact-metrics">
+                        <div class="metric-tile">
+                            <div class="label">Threats</div>
+                            <div class="metric-large">{{ abnormal.total_threats }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Stopped</div>
+                            <div class="metric-large">{{ abnormal.stopped_attacks }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">Cases</div>
+                            <div class="metric-large">{{ abnormal.open_cases }}</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="label">IOCs</div>
+                            <div class="metric-large">{{ abnormal.ioc_count }}</div>
+                        </div>
+                    </div>
+                    <p class="tool-copy status">{{ abnormal.status }}</p>
+
+                    <div class="insight-columns">
+                        <div>
+                            <h3>Trending attacks</h3>
+                            {% if abnormal.trending_attacks %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.trending_attacks[:4] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No trending attack buckets returned.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h3>Attack vectors</h3>
+                            {% if abnormal.attack_vectors %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.attack_vectors[:4] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No vector breakdown returned.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                <a class="tool-link" href="/abnormal/endpoints">View Abnormal endpoints →</a>
+            </article>
+
+            <article class="tool-card glass-card">
                 <div class="tool-header">
                     <div class="tool-title">
                         <div class="product-mark bitsight">BS</div>
@@ -48,7 +141,7 @@
                 <a class="tool-link" href="/bitsight/summary">Open BitSight dashboard →</a>
             </article>
 
-            <article class="tool-card">
+            <article class="tool-card glass-card">
                 <div class="tool-header">
                     <div class="tool-title">
                         <div class="product-mark crowdstrike">CS</div>
@@ -69,7 +162,7 @@
                             <div class="metric-large">{{ crowdstrike.total_hosts }}</div>
                         </div>
                         <div class="metric-tile">
-                            <div class="label">Security Events</div>
+                            <div class="label">Events</div>
                             <div class="metric-large">{{ crowdstrike.total_security_events }}</div>
                         </div>
                         <div class="metric-tile">

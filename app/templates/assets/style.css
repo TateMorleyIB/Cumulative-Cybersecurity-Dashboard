@@ -473,3 +473,191 @@ tr:last-child td {
         width: 100%;
     }
 }
+
+.overview-page {
+    background:
+        radial-gradient(circle at 14% 12%, rgba(37, 99, 235, 0.48), transparent 28rem),
+        radial-gradient(circle at 82% 10%, rgba(6, 182, 212, 0.34), transparent 30rem),
+        radial-gradient(circle at 50% 100%, rgba(124, 58, 237, 0.16), transparent 32rem),
+        linear-gradient(145deg, #07111f 0%, #101827 48%, #dbeafe 160%);
+    color: #e5eefc;
+}
+
+.overview-shell {
+    display: grid;
+    gap: 20px;
+}
+
+.glass-hero,
+.glass-metric,
+.glass-card {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+    box-shadow: 0 24px 70px rgba(2, 6, 23, 0.28);
+    backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.glass-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 22px;
+    border-radius: 32px;
+    padding: clamp(24px, 4vw, 42px);
+    overflow: hidden;
+    position: relative;
+}
+
+.glass-hero::after {
+    content: "";
+    position: absolute;
+    inset: -35% -10% auto auto;
+    width: 420px;
+    height: 420px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+}
+
+.glass-hero > * {
+    position: relative;
+    z-index: 1;
+}
+
+.glass-hero h1,
+.glass-hero .subtitle {
+    color: #ffffff;
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.overview-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.glass-metric {
+    border-radius: 22px;
+    color: #ffffff;
+    padding: 20px;
+}
+
+.glass-metric strong {
+    display: block;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    letter-spacing: -0.055em;
+    line-height: 1;
+    margin: 10px 0 8px;
+}
+
+.glass-metric small {
+    color: #cbd5e1;
+    font-weight: 700;
+}
+
+.accent-metric {
+    background: linear-gradient(145deg, rgba(6, 182, 212, 0.24), rgba(37, 99, 235, 0.14));
+}
+
+.overview-grid {
+    grid-template-columns: 1.35fr 1fr 1fr;
+}
+
+.glass-card {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.88);
+}
+
+.featured-card {
+    min-height: 100%;
+}
+
+.product-mark.abnormal {
+    background: linear-gradient(135deg, #0891b2, #2563eb 55%, #7c3aed);
+}
+
+.compact-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.insight-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 18px 0;
+}
+
+.insight-columns h3 {
+    color: var(--muted-strong);
+    font-size: 0.88rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.signal-list {
+    display: grid;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.signal-list li {
+    align-items: center;
+    background: rgba(248, 250, 252, 0.78);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 10px 12px;
+}
+
+.signal-list span {
+    color: var(--muted-strong);
+    font-weight: 750;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.signal-list strong {
+    color: var(--accent-dark);
+}
+
+.small-copy {
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+@media (max-width: 1120px) {
+    .overview-grid,
+    .overview-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .featured-card {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 720px) {
+    .glass-hero,
+    .hero-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .overview-grid,
+    .overview-metrics,
+    .compact-metrics,
+    .insight-columns {
+        grid-template-columns: 1fr;
+    }
+}

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from app.connectors.abnormal import ACCESSIBLE_ENDPOINTS, AbnormalConnector
 from app.connectors.bitsight import BitSightConnector
 from app.connectors.crowdstrike import CrowdStrikeConnector
 
@@ -94,6 +95,46 @@ def build_crowdstrike_overview(use_cache: bool = True):
         }
 
 
+def build_abnormal_overview(use_cache: bool = True):
+    try:
+        connector = AbnormalConnector()
+        snapshot = connector.get_snapshot(use_cache=use_cache)
+        normalized = snapshot.get("normalized", {})
+        summary = normalized.get("summary", {})
+        errors = snapshot.get("errors", {})
+        status = summary.get("status", "Available")
+        if errors:
+            status = f"{status}; {len(errors)} collection warning(s)"
+
+        return {
+            "total_threats": summary.get("total_threats", 0),
+            "stopped_attacks": summary.get("stopped_attacks", 0),
+            "open_cases": summary.get("open_cases", 0),
+            "not_analyzed": summary.get("not_analyzed", 0),
+            "ioc_count": summary.get("ioc_count", 0),
+            "risk_level": summary.get("risk_level", "Unknown"),
+            "status": status,
+            "trending_attacks": normalized.get("trending_attacks", []),
+            "attack_vectors": normalized.get("attack_vectors", []),
+            "recent_threats": normalized.get("recent_threats", []),
+            "errors": errors,
+        }
+    except Exception as error:
+        return {
+            "total_threats": 0,
+            "stopped_attacks": 0,
+            "open_cases": 0,
+            "not_analyzed": 0,
+            "ioc_count": 0,
+            "risk_level": "Unknown",
+            "status": "Unavailable",
+            "trending_attacks": [],
+            "attack_vectors": [],
+            "recent_threats": [],
+            "error": str(error),
+        }
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def get_master_dashboard(request: Request, use_cache: bool = True):
     return templates.TemplateResponse(
@@ -102,6 +143,7 @@ def get_master_dashboard(request: Request, use_cache: bool = True):
         context={
             "bitsight": build_bitsight_overview(),
             "crowdstrike": build_crowdstrike_overview(use_cache=use_cache),
+            "abnormal": build_abnormal_overview(use_cache=use_cache),
         },
     )
 
@@ -113,6 +155,55 @@ def root():
         "message": "Cybersecurity Dashboard API Online",
         "dashboard": "/dashboard",
     }
+
+
+###
+# ==============================
+# ABNORMAL
+# ==============================
+###
+@app.get("/abnormal/snapshot")
+def get_abnormal_snapshot(use_cache: bool = True):
+    try:
+        connector = AbnormalConnector()
+        return connector.get_snapshot(use_cache=use_cache)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.get("/abnormal/endpoints")
+def get_abnormal_endpoints():
+    return {
+        key: {"method": method, "path": path}
+        for key, (method, path) in ACCESSIBLE_ENDPOINTS.items()
+    }
+
+
+@app.get("/abnormal/{endpoint_key}")
+def get_abnormal_endpoint(endpoint_key: str, request: Request):
+    try:
+        connector = AbnormalConnector()
+        return connector.get_endpoint(
+            endpoint_key, params=dict(request.query_params) or None
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.post("/abnormal/{endpoint_key}")
+async def post_abnormal_endpoint(endpoint_key: str, request: Request):
+    try:
+        connector = AbnormalConnector()
+        payload = await request.json()
+        return connector.get_endpoint(
+            endpoint_key, params=dict(request.query_params) or None, payload=payload
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 ###
