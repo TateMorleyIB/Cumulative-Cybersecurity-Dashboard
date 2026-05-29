@@ -23,6 +23,11 @@ class BitSightConnector:
     BASE_URL = "https://api.bitsighttech.com/ratings/v1"
 
     def __init__(self):
+        """Creates the session and sets up API key handling
+
+        Raises:
+            ValueError: Checks if BitSight API key is present in the .env
+        """
         if not BITSIGHT_API_KEY:
             raise ValueError("BITSIGHT_API_KEY is missing from .env")
 
@@ -36,6 +41,11 @@ class BitSightConnector:
         })
         
     def get_company(self):
+        """Organizes fetched data to gather just the company information
+
+        Returns:
+            [Dict]: A list of company dictionaries
+        """
         data = self.get_companies_data()
         companies = data.get("companies", [])
 
@@ -46,6 +56,11 @@ class BitSightConnector:
 
 
     def get_company_guid(self):
+        """Returns only the company's guid value
+
+        Returns:
+            int: The guid value for the company, which may be used for further calls
+        """
         company = self.get_company()
 
         if not company:
@@ -55,6 +70,11 @@ class BitSightConnector:
 
 
     def get_company_logo_image(self):
+        """Fetches the company logo and caches it for use in frontend presentation
+
+        Returns:
+            File: The logo image file
+        """
         if LOGO_CACHE_FILE.exists():
             modified_time = datetime.fromtimestamp(LOGO_CACHE_FILE.stat().st_mtime)
             if datetime.now() - modified_time < CACHE_TTL:
@@ -93,6 +113,14 @@ class BitSightConnector:
         return response.content, content_type
 
     def get_company_sparkline_image(self):
+        """Fetches the companie's sparkline graphic and caches it
+        
+        FIXME: Implement front-end integration (ensure image size is only 60x20px)
+        NOT BEING USED! SPARKLIKNE IMG NOT DISPLAYED DUE TO FORMATTING ISSUES.
+
+        Returns:
+            File: The sparkline image file
+        """
         if SPARKLINE_CACHE_FILE.exists():
             modified_time = datetime.fromtimestamp(SPARKLINE_CACHE_FILE.stat().st_mtime)
             if datetime.now() - modified_time < CACHE_TTL:
@@ -163,6 +191,11 @@ class BitSightConnector:
         return data
     
     def get_company_summary(self):
+        """Gathers all data needed from BitSight to be used and displayed in other places.
+    
+        Returns:
+            JSON: the datapoints to summarize gitsight functionality
+        """
         data = self.get_companies_data()
         companies = data.get("companies", [])
 

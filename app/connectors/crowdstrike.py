@@ -13,6 +13,7 @@ from app.config import (
     CROWDSTRIKE_VULNERABILITY_FILTER,
 )
 
+# Constants for caching, limits, and severity mapping are defined here for easy configuration and maintenance.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_FILE = PROJECT_ROOT / "data" / "raw" / "crowdstrike" / "crowdstrike_snapshot.json"
 CACHE_TTL = timedelta(minutes=15)
@@ -46,6 +47,15 @@ class CrowdStrikeConnector:
     """Pulls, normalizes, and summarizes data available to the configured Falcon API client."""
 
     def __init__(self, cache_ttl: timedelta = CACHE_TTL):
+        """Sets up the caching infrastructure and checks for proper CrowdStrike credentials
+
+        Args:
+            cache_ttl (timedelta, optional): RPO for cached data. Defaults to CACHE_TTL.
+
+        Raises:
+            ValueError: warns if the client id is not in the .env
+            ValueError: warns if the CrowdStrike secret is not in the .env
+        """
         if not CROWDSTRIKE_CLIENT_ID:
             raise ValueError("CROWDSTRIKE_CLIENT_ID is missing from .env")
         if not CROWDSTRIKE_SECRET:
@@ -58,9 +68,18 @@ class CrowdStrikeConnector:
         self._token: str | None = None
 
     def _authenticate(self) -> str:
+        """Authenticates CrowdStrike requests by generating and storing a validation token
+
+        Raises:
+            ValueError: Detects if CrowdStrike does not supply the user with a token
+
+        Returns:
+            str: the token
+        """
         if self._token:
             return self._token
 
+        # Request an OAuth2 token using CrowdStrike Credentials
         response = self.session.post(
             f"{self.base_url}/oauth2/token",
             data={
@@ -81,6 +100,15 @@ class CrowdStrikeConnector:
         return token
 
     def _request(self, method: str, path: str, **kwargs) -> dict[str, Any]:
+        """Request wrapper that authenticates and checks that content is being returned
+
+        Args:
+            method (str): The HTTP method for the request (i.e. "GET", "POST", etc.)
+            path (str): The endpoint for the API to pull from
+
+        Returns:
+            dict[str, Any]: The data fetched
+        """
         self._authenticate()
         response = self.session.request(
             method, f"{self.base_url}{path}", timeout=30, **kwargs
@@ -90,13 +118,18 @@ class CrowdStrikeConnector:
             return {}
         return response.json()
 
-    def _query_ids(
-        self,
-        path: str,
-        limit: int,
-        sort: str | None = None,
-        filter_query: str | None = None,
-    ) -> list[str]:
+    def _query_ids(self, path: str, limit: int, sort: str | None = None, filter_query: str | None = None,) -> list[str]:
+        """ Queries a CrowdStrike endpoint that returns only IDs for the requested data, with optional sorting and filtering
+
+        Args:
+            path (str): The endpoint the API pulls from
+            limit (int): The number of results to return
+            sort (str | None, optional): The field to sort by. Defaults to None.
+            filter_query (str | None, optional): The filter query. Defaults to None.
+
+        Returns:
+            list[str]: The list of IDs
+        """
         data = self._query(path, limit, sort=sort, filter_query=filter_query)
         resources = data.get("resources", [])
         return [resource for resource in resources if isinstance(resource, str)]
@@ -108,6 +141,17 @@ class CrowdStrikeConnector:
         sort: str | None = None,
         filter_query: str | None = None,
     ) -> dict[str, Any]:
+        """ General query method for CrowdStrike endpoints that support filtering and sorting, used as a building block for more specific query methods
+
+        Args:
+            path (str): The endpoint the API pulls from
+            limit (int): The number of results to return
+            sort (str | None, optional): The field to sort by. Defaults to None.
+            filter_query (str | None, optional): The filter query. Defaults to None.
+
+        Returns:
+            dict[str, Any]: The data fetched
+        """
         params: dict[str, Any] = {"limit": limit}
         if sort:
             params["sort"] = sort
@@ -122,6 +166,20 @@ class CrowdStrikeConnector:
         sorts: list[str | None],
         filter_query: str | None = None,
     ) -> list[str]:
+        """Another wrapper to checks for ids with sorting fallbacks
+
+        Args:
+            path (str): The endpoint the API pulls from
+            limit (int): The number of results to return
+            sorts (list[str  |  None]): The fields to sort by
+            filter_query (str | None, optional): The filter query. Defaults to None.
+
+        Raises:
+            last_error: The last HTTP error that occurred
+
+        Returns:
+            list[str]: The list of ids
+        """
         last_error: requests.HTTPError | None = None
         for sort in sorts:
             try:
@@ -143,6 +201,20 @@ class CrowdStrikeConnector:
     def _fetch_entities_get(
         self, path: str, ids: list[str], id_param: str = "ids"
     ) -> list[dict[str, Any]]:
+        """Returns the entities from a GET endpoint using a list of entity ids.
+        
+        They are sent in batches of up to 100 per request. Results are gathered from
+        the API's response's "resources" field and compiled into a single list.
+
+        Args:
+            path (str): API endpoint to query
+            ids (list[str]): Entity IDs to fetch
+            id_param (str, optional): Name of the query parameter used for entity IDs.
+                                      Defaults to "ids".
+
+        Returns:
+            list[dict[str, Any]]: An organized list of key pairs of ids
+        """
         if not ids:
             return []
         entities: list[dict[str, Any]] = []
@@ -157,6 +229,17 @@ class CrowdStrikeConnector:
     def _fetch_entities_post(
         self, path: str, ids: list[str], id_key: str = "ids"
     ) -> list[dict[str, Any]]:
+        """Returns the entities from a POST endpoint using a list of entity ids.
+
+        Args:
+            path (str): API endpoint to query
+            ids (list[str]): Entity IDs to fetch
+            id_key (str, optional): Name of the key in the JSON payload for entity IDs.
+                                      Defaults to "ids".
+
+        Returns:
+            list[dict[str, Any]]: An organized list of key pairs of ids
+        """
         if not ids:
             return []
         entities: list[dict[str, Any]] = []
