@@ -776,3 +776,30 @@ tr:last-child td {
         width: 100%;
     }
 }
+
+.expanded-insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-section {
+    margin-top: 10px;
+}
+
+.compact-section h3 {
+    color: var(--muted-strong);
+    font-size: 0.88rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.abuse-list li {
+    align-items: flex-start;
+    flex-direction: column;
+}
+
+.abuse-list strong {
+    color: var(--warn-tx);
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}

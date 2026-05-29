@@ -82,12 +82,12 @@
                         <p class="status-note">Some Abnormal widgets are unavailable because {{ abnormal.collection_warning_count }} endpoint collection warning(s) occurred. Available metrics are still shown.</p>
                     {% endif %}
 
-                    <div class="insight-columns">
+                    <div class="insight-columns expanded-insights">
                         <div>
                             <h3>Trending attacks</h3>
                             {% if abnormal.trending_attacks %}
                                 <ul class="signal-list">
-                                    {% for item in abnormal.trending_attacks[:4] %}
+                                    {% for item in abnormal.trending_attacks[:5] %}
                                         <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
                                     {% endfor %}
                                 </ul>
@@ -101,7 +101,7 @@
                             <h3>Attack vectors</h3>
                             {% if abnormal.attack_vectors %}
                                 <ul class="signal-list">
-                                    {% for item in abnormal.attack_vectors[:4] %}
+                                    {% for item in abnormal.attack_vectors[:5] %}
                                         <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
                                     {% endfor %}
                                 </ul>
@@ -111,7 +111,45 @@
                                 <p class="muted small-copy">No vector breakdown returned by Abnormal.</p>
                             {% endif %}
                         </div>
+                        <div>
+                            <h3>Attack strategies</h3>
+                            {% if abnormal.attack_strategies %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.attack_strategies[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No attack strategy breakdown returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h3>Top recipients</h3>
+                            {% if abnormal.recipient_employees %}
+                                <ul class="signal-list">
+                                    {% for item in abnormal.recipient_employees[:5] %}
+                                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="muted small-copy">No recipient aggregation returned by Abnormal.</p>
+                            {% endif %}
+                        </div>
                     </div>
+
+                    {% if abnormal.recent_abuse_reports %}
+                        <div class="section compact-section">
+                            <h3>Recent abuse mailbox items awaiting analysis</h3>
+                            <ul class="signal-list abuse-list">
+                                {% for item in abnormal.recent_abuse_reports[:4] %}
+                                    <li>
+                                        <span>{{ item.subject }}</span>
+                                        <strong>{{ item.reason }}</strong>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                 {% endif %}
 
                 <a class="tool-link" href="/abnormal/endpoints">Browse Abnormal API endpoints →</a>

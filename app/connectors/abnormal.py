@@ -329,6 +329,7 @@ class AbnormalConnector:
             "attacks_stopped",
             "stopped_attacks",
             "stopped",
+            "attack_count",
             "total",
         )
         open_cases = self._first_number(
@@ -374,6 +375,15 @@ class AbnormalConnector:
             "impersonated_vendors": self._top_buckets(
                 raw.get("most_impersonated_vendor", {})
             ),
+            "recipient_employees": self._top_buckets(
+                raw.get("recipient_employees", {})
+            ),
+            "attack_frequency": self._attack_frequency(
+                raw.get("dashboard_summary", {})
+            ),
+            "recent_abuse_reports": [
+                self._normalize_abuse_report(item) for item in abuse_items[:6]
+            ],
             "recent_threats": [self._normalize_threat(item) for item in threats[:6]],
         }
 
@@ -406,8 +416,25 @@ class AbnormalConnector:
             ),
         }
 
-    def _top_buckets(self, payload: Any, limit: int = 5) -> list[dict[str, Any]]:
-        records = self._extract_records(payload)
+    def _attack_frequency(self, payload: Any, limit: int = 14) -> list[dict[str, Any]]:
+        return self._top_buckets(payload, limit=limit, record_key="attack_frequency")
+
+    def _normalize_abuse_report(self, item: dict[str, Any]) -> dict[str, Any]:
+        reporter = (
+            item.get("reporter") if isinstance(item.get("reporter"), dict) else {}
+        )
+        return {
+            "id": self._first(item, "abx_message_id", "id"),
+            "subject": self._first(item, "subject") or "Reported message",
+            "reason": self._first(item, "not_analyzed_reason", "reason") or "Unknown",
+            "reported_at": self._first(item, "reported_datetime", "reported_at"),
+            "reporter": self._first(reporter, "email", "name") if reporter else None,
+        }
+
+    def _top_buckets(
+        self, payload: Any, limit: int = 5, record_key: str | None = None
+    ) -> list[dict[str, Any]]:
+        records = self._extract_records(payload, record_key=record_key)
         buckets: list[dict[str, Any]] = []
         for record in records:
             if not isinstance(record, dict):
@@ -417,17 +444,25 @@ class AbnormalConnector:
                 "name",
                 "label",
                 "key",
-                "value",
                 "attackType",
                 "attack_type",
+                "attack_vector_group",
+                "attack_strategy",
+                "impersonated_party_name",
+                "impersonated_brand_name",
+                "display_name",
                 "employee",
                 "vendor",
                 "country",
+                "region_name",
                 "origin",
                 "strategy",
                 "vector",
+                "value",
             )
-            count = self._first(record, "count", "total", "value", "occurrences")
+            count = self._first(
+                record, "attack_count", "count", "total", "value", "occurrences"
+            )
             if label is None:
                 continue
             buckets.append(
@@ -451,27 +486,58 @@ class AbnormalConnector:
             ]
         return []
 
-    def _extract_records(self, payload: Any) -> list[Any]:
+    def _extract_records(
+        self, payload: Any, record_key: str | None = None
+    ) -> list[Any]:
         if isinstance(payload, list):
+            if record_key:
+                for item in payload:
+                    if isinstance(item, dict) and record_key in item:
+                        return self._extract_records(item[record_key])
             return payload
         if not isinstance(payload, dict):
             return []
-        for key in (
-            "resources",
-            "data",
-            "results",
-            "items",
-            "threats",
-            "cases",
-            "iocs",
-        ):
+
+        preferred_keys = [record_key] if record_key else []
+        preferred_keys.extend(
+            [
+                "resources",
+                "data",
+                "results",
+                "items",
+                "threats",
+                "cases",
+                "iocs",
+                "attack_stopped",
+                "attack_frequency",
+                "trending_attacks",
+                "attack_vector_breakdown",
+                "attack_strategy_breakdown",
+                "sender_impersonation_breakdown",
+                "attacker_origin",
+                "most_impersonated_employee",
+                "most_impersonated_vendor",
+                "recipient_employees",
+                "recipient_employees_vip",
+                "recipient_employees_non_vip",
+            ]
+        )
+        for key in preferred_keys:
+            if not key:
+                continue
             value = payload.get(key)
             if isinstance(value, list):
                 return value
             if isinstance(value, dict):
-                nested = self._extract_records(value)
+                nested = self._extract_records(value, record_key=record_key)
                 if nested:
                     return nested
+
+        for value in payload.values():
+            if isinstance(value, list) and all(
+                isinstance(item, dict) for item in value
+            ):
+                return value
         return []
 
     def _first_number(self, payload: Any, *keys: str) -> int | None:
@@ -491,7 +557,11 @@ class AbnormalConnector:
                 normalized = key.replace("-", "_").lower()
                 compact = normalized.replace("_", "")
                 if normalized in keyset or compact in keyset:
-                    return value
+                    if not isinstance(value, dict | list):
+                        return value
+                    found = self._find_value(value, keyset)
+                    if found is not None:
+                        return found
             for value in payload.values():
                 found = self._find_value(value, keyset)
                 if found is not None:

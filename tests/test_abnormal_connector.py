@@ -173,3 +173,81 @@ def test_abnormal_refreshes_cached_normalized_payload_with_current_rules(
 
     assert cached["normalized"]["summary"]["total_threats"] == 0
     assert cached["normalized"]["summary"]["not_analyzed"] == 100
+
+
+def test_abnormal_normalize_extracts_abnormal_named_payloads(monkeypatch):
+    abnormal = connector(monkeypatch)
+
+    normalized = abnormal.normalize(
+        {
+            "attack_stopped": {
+                "attack_stopped": [{"attack_count": 234, "prev_attack_count": 195}]
+            },
+            "trending_attacks": {
+                "trending_attacks": [
+                    {"attack_type": "Phishing: Credential", "attack_count": 144},
+                    {"attack_type": "Spam", "attack_count": 83},
+                ]
+            },
+            "attack_vector_breakdown": {
+                "attack_vector_breakdown": [
+                    {"attack_vector_group": "Link", "attack_count": 128}
+                ]
+            },
+            "attack_strategy_breakdown": {
+                "attack_strategy_breakdown": [
+                    {"attack_strategy": "Unknown Sender", "attack_count": 180}
+                ]
+            },
+            "sender_impersonation_breakdown": {
+                "sender_impersonation_breakdown": [
+                    {"impersonated_party_name": "Unknown Partner", "attack_count": 88}
+                ]
+            },
+            "attacker_origin": {
+                "attacker_origin": [{"region_name": "Americas", "attack_count": 190}]
+            },
+            "most_impersonated_vendor": {
+                "most_impersonated_vendor": [
+                    {"impersonated_brand_name": "docusign", "attack_count": 2}
+                ]
+            },
+            "recipient_employees": {
+                "recipient_employees": [
+                    {"display_name": "Executive User", "attack_count": 11}
+                ]
+            },
+            "abuse_not_analyzed": {
+                "results": [
+                    {
+                        "abx_message_id": 1,
+                        "subject": "Suspicious report",
+                        "not_analyzed_reason": "COULD_NOT_EXTRACT",
+                        "reporter": {"email": "reporter@example.com"},
+                    }
+                ]
+            },
+            "threats": {"total": 1463, "threats": [{"threatId": "threat-1"}]},
+        }
+    )
+
+    assert normalized["summary"]["total_threats"] == 1463
+    assert normalized["summary"]["stopped_attacks"] == 234
+    assert normalized["summary"]["not_analyzed"] == 1
+    assert normalized["trending_attacks"] == [
+        {"label": "Phishing: Credential", "count": 144},
+        {"label": "Spam", "count": 83},
+    ]
+    assert normalized["attack_vectors"] == [{"label": "Link", "count": 128}]
+    assert normalized["attack_strategies"] == [
+        {"label": "Unknown Sender", "count": 180}
+    ]
+    assert normalized["sender_impersonation"] == [
+        {"label": "Unknown Partner", "count": 88}
+    ]
+    assert normalized["attacker_origins"] == [{"label": "Americas", "count": 190}]
+    assert normalized["impersonated_vendors"] == [{"label": "docusign", "count": 2}]
+    assert normalized["recipient_employees"] == [
+        {"label": "Executive User", "count": 11}
+    ]
+    assert normalized["recent_abuse_reports"][0]["subject"] == "Suspicious report"
