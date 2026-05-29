@@ -287,3 +287,63 @@ def test_abnormal_normalize_uses_dashboard_summary_fallback_payloads(monkeypatch
     assert normalized["attack_frequency"] == [
         {"label": "Phishing: Credential", "count": 65}
     ]
+
+
+def test_abnormal_snapshot_treats_disabled_iocs_as_notice(monkeypatch):
+    import requests
+
+    abnormal = connector(monkeypatch)
+    abnormal.base_url = "https://api.abnormalplatform.com"
+    abnormal.ssl_warnings = []
+
+    class DisabledFeatureResponse:
+        status_code = 403
+        text = "This feature is not enabled for your account"
+
+        def json(self):
+            return {"errors": "This feature is not enabled for your account"}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/v1/iocs":
+            error = requests.HTTPError("403 Client Error")
+            error.response = DisabledFeatureResponse()
+            raise error
+        if path == "/v1/threats":
+            return {"total": 1, "threats": [{"threatId": "threat-1"}]}
+        if path == "/v1/cases":
+            return {"total": 0, "cases": []}
+        return {}
+
+    monkeypatch.setattr(abnormal, "_request", fake_request)
+    monkeypatch.setattr(abnormal, "_write_cache", lambda snapshot: None)
+
+    snapshot = abnormal.get_snapshot(use_cache=False)
+
+    assert snapshot["errors"] == {}
+    assert snapshot["notices"] == {
+        "iocs": "403: This feature is not enabled for your account"
+    }
+
+
+def test_abnormal_cache_reclassifies_disabled_iocs_as_notice(tmp_path, monkeypatch):
+    cache_file = tmp_path / "abnormal_snapshot.json"
+    cache_file.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-05-29T20:25:18.914791+00:00",
+                "raw": {"threats": {"total": 1, "threats": []}},
+                "errors": {"iocs": "403: This feature is not enabled for your account"},
+            }
+        )
+    )
+    monkeypatch.setattr(abnormal_module, "CACHE_FILE", cache_file)
+
+    abnormal = AbnormalConnector.__new__(AbnormalConnector)
+    abnormal.cache_ttl = abnormal_module.CACHE_TTL
+
+    cached = abnormal._read_cache()
+
+    assert cached["errors"] == {}
+    assert cached["notices"] == {
+        "iocs": "403: This feature is not enabled for your account"
+    }

@@ -102,6 +102,7 @@ def build_abnormal_overview(use_cache: bool = True):
         normalized = snapshot.get("normalized", {})
         summary = normalized.get("summary", {})
         errors = snapshot.get("errors", {})
+        notices = snapshot.get("notices", {})
         warnings = snapshot.get("warnings", [])
         status = summary.get("status", "Available")
         if errors:
@@ -127,8 +128,10 @@ def build_abnormal_overview(use_cache: bool = True):
             "recent_abuse_reports": normalized.get("recent_abuse_reports", []),
             "recent_threats": normalized.get("recent_threats", []),
             "errors": errors,
+            "notices": notices,
             "warnings": warnings,
             "collection_warning_count": len(errors),
+            "ioc_unavailable": "iocs" in notices,
             "has_trending_error": "trending_attacks" in errors,
             "has_vector_error": "attack_vector_breakdown" in errors,
         }
@@ -150,6 +153,8 @@ def build_abnormal_overview(use_cache: bool = True):
             "impersonated_vendors": [],
             "recent_abuse_reports": [],
             "recent_threats": [],
+            "notices": {},
+            "ioc_unavailable": False,
             "error": str(error),
         }
 

@@ -74,7 +74,8 @@
                         </div>
                         <div class="metric-tile">
                             <div class="label">IOCs</div>
-                            <div class="metric-large">{{ abnormal.ioc_count }}</div>
+                            <div class="metric-large">{% if abnormal.ioc_unavailable %}—{% else %}{{ abnormal.ioc_count }}{% endif %}</div>
+                            {% if abnormal.ioc_unavailable %}<small class="metric-note">Feature not enabled</small>{% endif %}
                         </div>
                     </div>
                     <p class="tool-copy status">{{ abnormal.status }}</p>

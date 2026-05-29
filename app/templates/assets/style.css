@@ -276,6 +276,16 @@ h3 {
     background: rgba(37, 99, 235, 0.08);
 }
 
+.metric-note {
+    color: var(--muted);
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 750;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+}
+
 .label {
     font-size: 0.78rem;
     font-weight: 800;

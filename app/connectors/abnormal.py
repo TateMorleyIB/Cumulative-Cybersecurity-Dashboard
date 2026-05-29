@@ -255,12 +255,17 @@ class AbnormalConnector:
 
         raw: dict[str, Any] = {}
         errors: dict[str, str] = {}
+        notices: dict[str, str] = {}
         for key, (method, path) in HIGH_LEVEL_ENDPOINTS.items():
             try:
                 kwargs = self._default_kwargs(key)
                 raw[key] = self._request(method, path, **kwargs)
             except requests.HTTPError as error:
-                errors[key] = self._format_http_error(error)
+                message = self._format_http_error(error)
+                if self._is_optional_feature_unavailable(key, message):
+                    notices[key] = message
+                else:
+                    errors[key] = message
             except Exception as error:
                 errors[key] = str(error)
 
@@ -270,6 +275,7 @@ class AbnormalConnector:
             "raw": raw,
             "normalized": self.normalize(raw),
             "errors": errors,
+            "notices": notices,
             "warnings": self.ssl_warnings,
         }
         self._write_cache(snapshot)
@@ -293,6 +299,12 @@ class AbnormalConnector:
             if self._is_unusable_error_snapshot(snapshot):
                 return None
             snapshot["normalized"] = self.normalize(snapshot.get("raw", {}))
+            errors, notices = self._split_endpoint_issues(snapshot.get("errors", {}))
+            existing_notices = snapshot.get("notices", {})
+            if isinstance(existing_notices, dict):
+                notices = {**existing_notices, **notices}
+            snapshot["errors"] = errors
+            snapshot["notices"] = notices
             snapshot.setdefault("warnings", [])
             return snapshot
         except (OSError, json.JSONDecodeError):
@@ -300,6 +312,22 @@ class AbnormalConnector:
 
     def _is_unusable_error_snapshot(self, snapshot: dict[str, Any]) -> bool:
         return not snapshot.get("raw") and bool(snapshot.get("errors"))
+
+    def _split_endpoint_issues(
+        self, errors: dict[str, str]
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        blocking_errors: dict[str, str] = {}
+        notices: dict[str, str] = {}
+        for key, message in errors.items():
+            if self._is_optional_feature_unavailable(key, message):
+                notices[key] = message
+            else:
+                blocking_errors[key] = message
+        return blocking_errors, notices
+
+    def _is_optional_feature_unavailable(self, key: str, message: str) -> bool:
+        normalized = str(message).lower()
+        return key == "iocs" and "403" in normalized and "not enabled" in normalized
 
     def _write_cache(self, snapshot: dict[str, Any]) -> None:
         if self._is_unusable_error_snapshot(snapshot):
